@@ -1,0 +1,260 @@
+# Сценарии тестирования платежной системы
+# Категории автоматически определяются по префиксу ID (S1, S2, S3...)
+
+# S1 - Базовые успешные платежи
+- id: "S1.1"
+  desc: "Базовая оплата APPROVED"
+  category: "Базовые платежи"
+  priority: "critical"
+
+- id: "S1.2"
+  desc: "Ретрай APPROVED (тот же orderReference)"
+  category: "Базовые платежи"
+  priority: "high"
+
+# S2 - Работа с инвойсами
+- id: "S2.1"
+  desc: "Два инвойса: старый→новый APPROVED"
+  category: "Управление инвойсами"
+  priority: "high"
+
+- id: "S2.2"
+  desc: "Два инвойса: новый→старый APPROVED"
+  category: "Управление инвойсами"
+  priority: "high"
+
+- id: "S2.3"
+  desc: "Оплата по старой ссылке (устаревший инвойс)"
+  category: "Управление инвойсами"
+  priority: "normal"
+
+- id: "S2.4"
+  desc: "Оплата другого plan_id того же бота"
+  category: "Управление инвойсами"
+  priority: "normal"
+
+# S3 - Неуспешные статусы
+- id: "S3.1"
+  desc: "Только DECLINED"
+  category: "Неуспешные платежи"
+  priority: "critical"
+
+- id: "S3.2"
+  desc: "Только EXPIRED"
+  category: "Неуспешные платежи"
+  priority: "high"
+
+- id: "S3.3"
+  desc: "Только PENDING/IN_PROCESS"
+  category: "Неуспешные платежи"
+  priority: "high"
+
+- id: "S3.4"
+  desc: "WAITING_AUTH_COMPLETE (3DS промежуточный)"
+  category: "Неуспешные платежи"
+  priority: "high"
+
+- id: "S3.5"
+  desc: "Частичный DECLINED / несоответствие суммы"
+  category: "Неуспешные платежи"
+  priority: "normal"
+
+# S4 - Повторные действия
+- id: "S4.1"
+  desc: "Повторные клики после успеха (лишняя оплата)"
+  category: "Пользовательские ошибки"
+  priority: "high"
+
+# S5 - Рекуррентные платежи
+- id: "S5.1"
+  desc: "Рекуррентка: первый платёж (recToken)"
+  category: "Рекуррентные платежи"
+  priority: "critical"
+
+- id: "S5.2"
+  desc: "Рекуррентка: последующие по токену"
+  category: "Рекуррентные платежи"
+  priority: "critical"
+
+- id: "S5.3"
+  desc: "Рекуррентка: пользователь отключил автоплатежи"
+  category: "Рекуррентные платежи"
+  priority: "high"
+
+- id: "S5.4"
+  desc: "Рекуррентка: несколько DECLINED подряд (токен мёртв)"
+  category: "Рекуррентные платежи"
+  priority: "high"
+
+# S6 - Возвраты и споры
+- id: "S6.1"
+  desc: "REFUNDED полный после APPROVED"
+  category: "Возвраты и споры"
+  priority: "critical"
+
+- id: "S6.2"
+  desc: "REFUNDED частичный"
+  category: "Возвраты и споры"
+  priority: "high"
+
+- id: "S6.3"
+  desc: "REFUNDED по рекуррентке (валидность recToken)"
+  category: "Возвраты и споры"
+  priority: "high"
+
+- id: "S6.4"
+  desc: "Чарджбек/диспут"
+  category: "Возвраты и споры"
+  priority: "critical"
+
+# S7 - Безопасность и валидация
+- id: "S7.1"
+  desc: "Неверная подпись"
+  category: "Безопасность"
+  priority: "critical"
+
+- id: "S7.2"
+  desc: "Чужой merchantAccount"
+  category: "Безопасность"
+  priority: "critical"
+
+- id: "S7.3"
+  desc: "Битый JSON / нет orderReference"
+  category: "Безопасность"
+  priority: "high"
+
+- id: "S7.4"
+  desc: "Rate limiting по IP"
+  category: "Безопасность"
+  priority: "high"
+
+- id: "S7.5"
+  desc: "Replay-атаки (старые вебхуки)"
+  category: "Безопасность"
+  priority: "critical"
+
+# S8 - Ошибки данных
+- id: "S8.1"
+  desc: "orderReference не найден"
+  category: "Валидация данных"
+  priority: "high"
+
+- id: "S8.2"
+  desc: "Непарсибельный формат orderReference"
+  category: "Валидация данных"
+  priority: "normal"
+
+# S9 - Идемпотентность и дубликаты
+- id: "S9.1"
+  desc: "Дубликат APPROVED одного orderReference (идемпотентность)"
+  category: "Идемпотентность"
+  priority: "critical"
+
+- id: "S9.2"
+  desc: "Поздний APPROVED после другого APPROVED (другой инвойс)"
+  category: "Идемпотентность"
+  priority: "high"
+
+- id: "S9.3"
+  desc: "Одновременные вебхуки (гонка)"
+  category: "Идемпотентность"
+  priority: "high"
+
+# S10 - Технические сбои
+- id: "S10.1"
+  desc: "Наш 5xx → ретраи WFP"
+  category: "Отказоустойчивость"
+  priority: "critical"
+
+- id: "S10.2"
+  desc: "БД недоступна при вебхуке"
+  category: "Отказоустойчивость"
+  priority: "critical"
+
+# S11 - Административные изменения
+- id: "S11.1"
+  desc: "Админ: Стоп сейчас → следующий APPROVED"
+  category: "Административные операции"
+  priority: "high"
+
+- id: "S11.2"
+  desc: "План изменён/выключен после инвойса"
+  category: "Административные операции"
+  priority: "normal"
+
+- id: "S11.3"
+  desc: "Админ правит plan_id у инвойса"
+  category: "Административные операции"
+  priority: "normal"
+
+- id: "S11.4"
+  desc: "Ручная корректировка подписки админом"
+  category: "Административные операции"
+  priority: "normal"
+
+# S12 - Множественные сущности
+- id: "S12.1"
+  desc: "Один user — несколько ботов"
+  category: "Мульти-сущности"
+  priority: "normal"
+
+- id: "S12.2"
+  desc: "Несколько активных планов одного бота"
+  category: "Мульти-сущности"
+  priority: "normal"
+
+# S13 - Управление пользователями
+- id: "S13.1"
+  desc: "VerifiedUser создаётся на первом успехе"
+  category: "Управление пользователями"
+  priority: "high"
+
+- id: "S13.2"
+  desc: "VerifiedUser инкремент счётчиков"
+  category: "Управление пользователями"
+  priority: "normal"
+
+# S14 - Работа с валютами
+- id: "S14.1"
+  desc: "Десятичные/валюта/комиссии"
+  category: "Валюты и суммы"
+  priority: "high"
+
+# S15 - Несовпадения данных
+- id: "S15.1"
+  desc: "Несовпадение amount/currency между инвойсом и вебхуком"
+  category: "Валидация данных"
+  priority: "critical"
+
+# S16 - Нестандартные сценарии
+- id: "S16.1"
+  desc: "returnUrl без вебхука (закрыл страницу)"
+  category: "Пользовательские сценарии"
+  priority: "normal"
+
+# S17 - Мониторинг и алерты
+- id: "S17.1"
+  desc: "Мониторинг: высокий процент DECLINED"
+  category: "Мониторинг"
+  priority: "high"
+
+- id: "S17.2"
+  desc: "Мониторинг: подозрительные паттерны"
+  category: "Мониторинг"
+  priority: "high"
+
+- id: "S17.3"
+  desc: "Мониторинг: расхождение сумм"
+  category: "Мониторинг"
+  priority: "critical"
+
+# S18 - Миграции
+- id: "S18.1"
+  desc: "Миграция формата orderReference"
+  category: "Миграции"
+  priority: "low"
+
+- id: "S18.2"
+  desc: "Миграция структуры планов"
+  category: "Миграции"
+  priority: "low"

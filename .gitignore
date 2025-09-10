@@ -1,0 +1,31 @@
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# IDE и редакторы
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Секреты и конфиги
+.env
+*.sqlite3
+
+# Django артефакты
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Статика и медиа
+/staticfiles/
+/media/
+
+# Логи
+/logs/
+/*.log
+
+# Документация (если не нужна в репо)
+docs/
