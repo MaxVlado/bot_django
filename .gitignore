@@ -30,4 +30,4 @@ __pycache__/
 # Документация (если не нужна в репо)
 docs/
 temp/
-setting.md
+*.md
