@@ -104,7 +104,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'ru'
-TIME_ZONE = os.environ.get('TIME_ZONE', 'Europe/Kyiv')  # используем Europe/Kyiv по твоим правилам
+TIME_ZONE = os.environ.get('TIME_ZONE', 'Europe/Kyiv')
 USE_I18N = True
 USE_TZ = True
 

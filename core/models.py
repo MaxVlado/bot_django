@@ -1,3 +1,4 @@
+#core/models
 from django.db import models
 from django.utils import timezone
 
@@ -43,6 +44,18 @@ class Bot(models.Model):
     username = models.CharField(max_length=255, blank=True, help_text="@username в Telegram")
     token = models.CharField(max_length=255, blank=True, help_text="HTTP API токен бота (храним аккуратно)")
     is_enabled = models.BooleanField(default=True)
+
+    port = models.PositiveIntegerField(unique=True, null=True, blank=True,
+                                       help_text="Порт для вебхука (например, 8101)")
+    path = models.CharField(max_length=255, blank=True, help_text="Рабочая директория скрипта")
+    log_path = models.CharField(max_length=255, blank=True, help_text="Путь к лог-файлу")
+    domain_name = models.CharField(max_length=255, blank=True, help_text="Доменное имя для вебхука")
+    status = models.CharField(
+        max_length=20,
+        choices=[("running", "Running"), ("stopped", "Stopped"), ("failed", "Failed")],
+        default="stopped"
+    )
+    last_heartbeat = models.DateTimeField(default=timezone.now)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
