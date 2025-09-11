@@ -28,7 +28,7 @@ pytest -q --scenario-report-json=coverage_scenarios.json --scenario-min-coverage
 pytest -q tests/bot
 # tree
 tree -I "venv|.venv|__pycache__|migrations"
-tree -I "venv|.venv|__pycache__|migrations|tests"
+tree -I "venv|.venv|__pycache__|migrations|tests|staticfiles|docs|temp"
 
 # linux
 pip show asyncpg

@@ -1,0 +1,80 @@
+# A1 — Админка Bot + MerchantConfig
+- id: "A1.1"
+  desc: "Создание Bot в админке с inline MerchantConfig"
+  category: "Админка"
+  priority: "critical"
+
+- id: "A1.2"
+  desc: "Редактирование MerchantConfig сохраняется корректно"
+  category: "Админка"
+  priority: "high"
+
+- id: "A1.3"
+  desc: "Поле token в админке скрыто под маской"
+  category: "Админка"
+  priority: "high"
+
+# A2 — Действия через админку (Supervisor)
+- id: "A2.1"
+  desc: "Кнопка Start запускает процесс через supervisorctl"
+  category: "Админка/действия"
+  priority: "critical"
+
+- id: "A2.2"
+  desc: "Кнопка Stop останавливает процесс"
+  category: "Админка/действия"
+  priority: "critical"
+
+- id: "A2.3"
+  desc: "Кнопка Restart перезапускает процесс"
+  category: "Админка/действия"
+  priority: "high"
+
+- id: "A2.4"
+  desc: "Кнопка View Logs показывает последние строки из файла лога"
+  category: "Админка/действия"
+  priority: "normal"
+
+- id: "A2.5"
+  desc: "Кнопка Clear Logs очищает файл лога"
+  category: "Админка/действия"
+  priority: "normal"
+
+# A3 — Supervisor интеграция
+- id: "A3.1"
+  desc: "Генерация supervisor-конфига для Bot корректна"
+  category: "Supervisor"
+  priority: "critical"
+
+- id: "A3.2"
+  desc: "Статус процесса синхронизируется в Bot.status"
+  category: "Supervisor"
+  priority: "high"
+
+# A4 — Bot Runner
+- id: "A4.1"
+  desc: "bot_runner.py загружает конфиг Bot и MerchantConfig из БД"
+  category: "Bot Runner"
+  priority: "critical"
+
+- id: "A4.2"
+  desc: "bot_runner.py не запускает бота, если is_enabled=False"
+  category: "Bot Runner"
+  priority: "high"
+
+# A5 — Nginx конфиг
+- id: "A5.1"
+  desc: "Генерация nginx location для бота (порт → /tg/bot-<id>/webhook)"
+  category: "Nginx"
+  priority: "normal"
+
+# A6 — End-to-End (acceptance)
+- id: "A6.1"
+  desc: "Создание Bot + MerchantConfig → запуск процесса → Telegram webhook принят"
+  category: "E2E"
+  priority: "critical"
+
+- id: "A6.2"
+  desc: "Bot пишет логи в log_path, View Logs показывает последние записи"
+  category: "E2E"
+  priority: "high"

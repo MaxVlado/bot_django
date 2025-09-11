@@ -1,17 +1,37 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import TelegramUser, Bot
+from payments.models import MerchantConfig
 
-admin.site.site_header = 'Админка ботов'
+
+class MerchantConfigInline(admin.StackedInline):
+    model = MerchantConfig
+    can_delete = False
+    extra = 0
+
 
 @admin.register(Bot)
 class BotAdmin(admin.ModelAdmin):
-    list_display = ("bot_id", "username", "title", "is_enabled", "created_at")
+    list_display = ("bot_id", "username", "title", "is_enabled", "status", "port", "domain_name", "last_heartbeat")
     search_fields = ("bot_id", "username", "title")
-    list_filter = ("is_enabled",)
+    list_filter = ("is_enabled", "status")
+    readonly_fields = ("status", "last_heartbeat")
+    inlines = [MerchantConfigInline]
 
+    fieldsets = (
+        (None, {
+            "fields": ("bot_id", "title", "username", "token", "is_enabled")
+        }),
+        ("Runtime", {
+            "fields": ("port", "path", "log_path", "domain_name", "status", "last_heartbeat")
+        }),
+    )
 
-from django.contrib import admin
-from .models import TelegramUser
+    def formfield_for_dbfield(self, db_field, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, **kwargs)
+        if db_field.name == "token":
+            formfield.widget.attrs["type"] = "password"
+        return formfield
 
 
 class ActiveStatusFilter(admin.SimpleListFilter):
