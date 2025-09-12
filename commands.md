@@ -5,7 +5,7 @@ venv\Scripts\activate     # Windows
 deactivate
 
 # Основные Django команды
-python manage.py runserver 127.0.0.1:8000        # Запуск сервера
+python manage.py runserver 127.0.0.1:8001        # Запуск сервера
 python manage.py makemigrations bot
 python manage.py showmigrations bot  # проверкf статуса миграций.
 
@@ -18,7 +18,7 @@ python manage.py check              # Проверка на все
 
 # Работа с зависимостями
 pip freeze > requirements.txt       # Сохранить зависимости
-pip install -r requirements.txt     # Установить зависимости
+`pip install -r requirements.txt `    # Установить зависимости
 
 # test
 pytest -q                           # Просто отчёт (не валим билд)

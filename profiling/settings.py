@@ -26,7 +26,7 @@ ALLOWED_HOSTS = [
     "dev.astrocryptovoyager.com",
     "www.dev.astrocryptovoyager.com",
     "205.196.80.158",
-    "localhost"
+    "localhost","127.0.0.1"
 ]
 
 
