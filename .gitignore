@@ -31,3 +31,4 @@ __pycache__/
 docs/
 temp/
 *.md
+.git.bfg-report/

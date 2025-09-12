@@ -171,8 +171,8 @@ def pytest_configure(config):
     base = Path(config.rootpath, "tests")
     candidates = [
 
-        #base / "payment" /"scenarios.yml",
-        #base / "bot" / "scenarios.yml",
+        base / "payment" /"scenarios.yml",
+        base / "bot" / "scenarios.yml",
         base / "bot_admin_merchant" /"scenarios.yml",
     ]
     for p in candidates:
