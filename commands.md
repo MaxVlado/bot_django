@@ -1,6 +1,6 @@
 Полезные команды для справки
 # Активация/деактивация окружения
-source venv/bin/activate  # Linux/macOS
+source .venv/bin/activate  # Linux/macOS
 venv\Scripts\activate     # Windows
 deactivate
 

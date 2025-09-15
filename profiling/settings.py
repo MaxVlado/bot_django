@@ -110,11 +110,14 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-STATIC_ROOT = '/var/www/astrocryptov_usr/data/www/dev.astrocryptovoyager.com/staticfiles'
-
-# Media files
 MEDIA_URL = '/media/'
-MEDIA_ROOT = '/var/www/astrocryptov_usr/data/www/dev.astrocryptovoyager.com/media'
+
+if os.getenv("DJANGO_ENV") == "production":
+    STATIC_ROOT = '/var/www/astrocryptov_usr/data/www/dev.astrocryptovoyager.com/staticfiles'
+    MEDIA_ROOT = '/var/www/astrocryptov_usr/data/www/dev.astrocryptovoyager.com/media'
+else:
+    STATIC_ROOT = BASE_DIR / "staticfiles"
+    MEDIA_ROOT = BASE_DIR / "media"
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

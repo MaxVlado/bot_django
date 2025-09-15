@@ -1,7 +1,7 @@
 from .models import TelegramUser, Bot
 from payments.models import MerchantConfig
 import subprocess
-from django.urls import path
+from django.urls import path, reverse
 from django.http import HttpResponseRedirect, HttpResponse
 from django.contrib import admin, messages
 from django.shortcuts import get_object_or_404
@@ -16,8 +16,8 @@ class MerchantConfigInline(admin.StackedInline):
 
 @admin.register(Bot)
 class BotAdmin(admin.ModelAdmin):
-    list_display = ("bot_id", "username", "title", "is_enabled", "status","port", "domain_name", "last_heartbeat", "action_buttons")
-    search_fields = ("bot_id", "username", "title")
+    list_display = ("bot_id", "username", "is_enabled", "live_status","port",  "last_heartbeat", "action_buttons")
+    search_fields = ("bot_id", "username")
     list_filter = ("is_enabled", "status")
     readonly_fields = ("status", "last_heartbeat")
     inlines = [MerchantConfigInline]
@@ -40,17 +40,31 @@ class BotAdmin(admin.ModelAdmin):
 
     def action_buttons(self, obj):
         return format_html(
-            '<a class="button" href="{}">Start</a>&nbsp;'
-            '<a class="button" href="{}">Stop</a>&nbsp;'
-            '<a class="button" href="{}">Restart</a>&nbsp;'
-            '<a class="button" href="{}">Logs</a>&nbsp;'
-            '<a class="button" href="{}">Clear Logs</a>',
+            '<div style="display: flex; flex-direction: column; gap: 4px;">'
+            
+            '    <a class="button" href="{}">Start</a>'
+            '    <a class="button" href="{}">Stop</a>'
+            '    <a class="button" href="{}">Restart</a><br>'
+
+            '    <a class="button" href="{}">Restart Django</a><br>'
+
+            '    <a class="button" href="{}">View Out Logs</a>'
+            '    <a class="button" href="{}">View Err Logs</a><br>'
+            '    <a class="button" href="{}">Clear Out Logs</a>'
+            '    <a class="button" href="{}">Clear Err Logs</a>'
+             
+            '</div>',
             f"{obj.id}/start/",
             f"{obj.id}/stop/",
             f"{obj.id}/restart/",
-            f"{obj.id}/logs/",
-            f"{obj.id}/clear_logs/",
+            reverse("admin:core_restart_django"),
+            f"{obj.id}/logs/out/",
+            f"{obj.id}/logs/err/",
+            f"{obj.id}/clear_logs/out/",
+            f"{obj.id}/clear_logs/err/",
         )
+    
+    
     action_buttons.short_description = "Actions"
     action_buttons.allow_tags = True
 
@@ -60,14 +74,87 @@ class BotAdmin(admin.ModelAdmin):
             path("<int:bot_id>/start/", self.admin_site.admin_view(self.start_bot), name="core_bot_start"),
             path("<int:bot_id>/stop/", self.admin_site.admin_view(self.stop_bot), name="core_bot_stop"),
             path("<int:bot_id>/restart/", self.admin_site.admin_view(self.restart_bot), name="core_bot_restart"),
-            path("<int:bot_id>/logs/", self.admin_site.admin_view(self.view_logs), name="core_bot_logs"),
-            path("<int:bot_id>/clear_logs/", self.admin_site.admin_view(self.clear_logs), name="core_bot_clear_logs"),
+            path("<int:bot_id>/logs/out/", self.admin_site.admin_view(self.view_out_logs), name="core_bot_logs_out"),
+            path("<int:bot_id>/logs/err/", self.admin_site.admin_view(self.view_err_logs), name="core_bot_logs_err"),
+            path("<int:bot_id>/clear_logs/out/", self.admin_site.admin_view(self.clear_out_logs), name="core_bot_clear_logs_out"),
+            path("<int:bot_id>/clear_logs/err/", self.admin_site.admin_view(self.clear_err_logs), name="core_bot_clear_logs_err"),
+            path("restart_django/", self.admin_site.admin_view(self.restart_django), name="core_restart_django"),
+
         ]
         return custom_urls + urls
 
     def supervisorctl(self, command, bot_id):
         program = f"bot-{bot_id}"
-        return subprocess.check_output(["supervisorctl", command, program], stderr=subprocess.STDOUT)
+        return subprocess.check_output(
+            ["sudo", "supervisorctl", command, program],
+            stderr=subprocess.STDOUT
+        )
+
+    def live_status(self, obj):
+        try:
+            result = subprocess.run(
+                ["sudo", "supervisorctl", "status", f"bot-{obj.bot_id}"],
+                capture_output=True, text=True
+            )
+            output = result.stdout.strip()
+
+            if "RUNNING" in output.upper():
+                color, text = "green", "Running"
+            elif "STOPPED" in output.upper():
+                color, text = "red", "Stopped"
+            elif "STARTING" in output.upper():
+                color, text = "orange", "Starting"
+            elif "EXITED" in output.upper():
+                color, text = "gray", "Exited"
+            elif "BACKOFF" in output.upper():
+                color, text = "purple", "Backoff"
+            elif "FATAL" in output.upper():
+                color, text = "black", "Fatal"
+            else:
+                color, text = "gray", output or "Unknown"
+
+        except Exception as e:
+            color, text = "orange", f"Error: {e}"
+
+        return format_html(
+            '<span style="color: white; background-color: {}; padding: 2px 6px; border-radius: 4px;">{}</span>',
+            color,
+            text,
+        )
+
+    live_status.short_description = "Live Status"
+
+    def restart_django(self, request):
+        try:
+            subprocess.run(
+                ["sudo", "-n", "systemctl", "restart", "dev-astrovoyager"],
+                capture_output=True, text=True
+            )
+            return HttpResponse(
+                """
+                <div style="text-align:center">
+                <h2>Django service is restarting...</h2>
+                <p>You will be redirected to the admin panel in <span id="counter">3</span> seconds.</p>
+                </div>
+                <script>
+                    var count = 3;
+                    var counterElem = document.getElementById("counter");
+                    var interval = setInterval(function() {
+                        count--;
+                        if (count <= 0) {
+                            clearInterval(interval);
+                            window.location.href = '/admin/core/bot/';
+                        } else {
+                            counterElem.textContent = count;
+                        }
+                    }, 1000);
+                </script>
+                """,
+                content_type="text/html"
+            )
+        except Exception as e:
+            self.message_user(request, f"Error: {e}", messages.ERROR)
+            return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
     def start_bot(self, request, bot_id, *args, **kwargs):
         bot = get_object_or_404(Bot, pk=bot_id)
@@ -96,20 +183,40 @@ class BotAdmin(admin.ModelAdmin):
             self.message_user(request, f"Error: {e}", messages.ERROR)
         return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
-    def view_logs(self, request, bot_id, *args, **kwargs):
-        bot = get_object_or_404(Bot, pk=bot_id)
+    
+    def view_out_logs(self, request, bot_id, *args, **kwargs):
+        log_file = f"/var/www/astrocryptov_usr/data/logs/bot_{bot_id}.out.log"
         try:
-            with open(bot.log_path, "r") as f:
+            with open(log_file, "r") as f:
+                lines = f.readlines()[-50:]
+            return HttpResponse("<br>".join(lines))
+        except Exception as e:
+            return HttpResponse(f"Error: {e}", status=500)
+    
+    def view_err_logs(self, request, bot_id, *args, **kwargs):
+        log_file = f"/var/www/astrocryptov_usr/data/logs/bot_{bot_id}.err.log"
+        try:
+            with open(log_file, "r") as f:
                 lines = f.readlines()[-50:]
             return HttpResponse("<br>".join(lines))
         except Exception as e:
             return HttpResponse(f"Error: {e}", status=500)
 
-    def clear_logs(self, request, bot_id, *args, **kwargs):
-        bot = get_object_or_404(Bot, pk=bot_id)
+    
+    def clear_out_logs(self, request, bot_id, *args, **kwargs):
+        log_file = f"/var/www/astrocryptov_usr/data/logs/bot_{bot_id}.out.log"
         try:
-            open(bot.log_path, "w").close()
-            self.message_user(request, "Logs cleared", messages.SUCCESS)
+            open(log_file, "w").close()
+            self.message_user(request, "Out logs cleared", messages.SUCCESS)
+        except Exception as e:
+            self.message_user(request, f"Error: {e}", messages.ERROR)
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
+
+    def clear_err_logs(self, request, bot_id, *args, **kwargs):
+        log_file = f"/var/www/astrocryptov_usr/data/logs/bot_{bot_id}.err.log"
+        try:
+            open(log_file, "w").close()
+            self.message_user(request, "Err logs cleared", messages.SUCCESS)
         except Exception as e:
             self.message_user(request, f"Error: {e}", messages.ERROR)
         return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
