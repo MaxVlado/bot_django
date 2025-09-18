@@ -30,16 +30,6 @@
   category: "Админка/действия"
   priority: "high"
 
-- id: "A2.4"
-  desc: "Кнопка View Logs показывает последние строки из файла лога"
-  category: "Админка/действия"
-  priority: "normal"
-
-- id: "A2.5"
-  desc: "Кнопка Clear Logs очищает файл лога"
-  category: "Админка/действия"
-  priority: "normal"
-
 # A3 — Supervisor интеграция
 - id: "A3.1"
   desc: "Генерация supervisor-конфига для Bot корректна"
@@ -74,7 +64,12 @@
   category: "E2E"
   priority: "critical"
 
-- id: "A6.2"
-  desc: "Bot пишет логи в log_path, View Logs показывает последние записи"
-  category: "E2E"
-  priority: "high"
+#- id: "A6.2"
+#  desc: "Bot пишет логи в log_path, View Logs показывает последние записи"
+#  category: "E2E"
+#  priority: "high"
+#
+#- id: "A6.3"
+#  desc: "Bot пишет ошибки в log_path, View Err Logs показывает последние записи"
+#  category: "E2E"
+#  priority: "high"

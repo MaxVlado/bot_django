@@ -35,15 +35,28 @@ def test_generate_and_write_supervisor_config(tmp_path):
 @pytest.mark.covers("A3.2")
 def test_get_status_updates_bot_status(monkeypatch):
     """A3.2: Статус процесса синхронизируется в Bot.status"""
-    bot = Bot.objects.create(bot_id=501, title="Stat Bot", username="stat_bot", token="XYZ")
+    bot = Bot.objects.create(
+        bot_id=501,
+        title="Stat Bot",
+        username="stat_bot",
+        token="XYZ",
+    )
 
-    def fake_check_output(args):
-        return b"bot-501 RUNNING pid 1234, uptime 0:01:23"
+    class FakeCompleted:
+        def __init__(self, stdout="bot-501    RUNNING   pid 1234, uptime 0:01:23"):
+            self.stdout = stdout
+            self.stderr = ""
 
-    monkeypatch.setattr("botops.supervisor.subprocess.check_output", fake_check_output)
+    def fake_run(args, capture_output, text):
+        return FakeCompleted()
+
+    # патчим subprocess.run в модуле botops.supervisor
+    monkeypatch.setattr("botops.supervisor.subprocess.run", fake_run)
 
     status = supervisor.get_status(bot)
     bot.refresh_from_db()
 
     assert status == "RUNNING"
     assert bot.status == "RUNNING"
+
+

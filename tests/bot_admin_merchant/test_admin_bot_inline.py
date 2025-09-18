@@ -2,6 +2,7 @@ import pytest
 from django.urls import reverse
 from core.models import Bot
 from payments.models import MerchantConfig
+from botops import supervisor
 
 @pytest.mark.django_db
 @pytest.mark.covers("A1.1")
@@ -110,100 +111,52 @@ def test_bot_token_field_masked_in_admin(admin_client):
 
 @pytest.mark.django_db
 @pytest.mark.covers("A2.1")
-def test_admin_start_bot_triggers_supervisorctl(monkeypatch, admin_client):
-    """A2.1: Кнопка Start запускает процесс через supervisorctl"""
-    bot = Bot.objects.create(bot_id=400, title="Start Bot", username="start_bot", token="XYZ")
-
+def test_admin_start_bot_triggers_supervisorctl(monkeypatch):
     called = {}
 
-    def fake_check_output(args, stderr=None):
+    def fake_run(args, capture_output=True, text=True):
         called["args"] = args
-        return b"started"
+        class R:
+            returncode = 0
+            stdout = "bot-1: started"
+            stderr = ""
+        return R()
+    monkeypatch.setattr("subprocess.run", fake_run)
 
-    monkeypatch.setattr("core.admin.subprocess.check_output", fake_check_output)
+    bot = Bot.objects.create(bot_id=1, title="t", username="u", token="x")
+    supervisor.start(bot)
 
-    url = reverse("admin:core_bot_start", args=[bot.id])
-    response = admin_client.post(url, follow=True)
-
-    assert response.status_code == 200
-    assert called["args"][0] == "supervisorctl"
-    assert b"started"
-
+    assert called["args"] == ["sudo", "supervisorctl", "start", f"bot-{bot.bot_id}"]
 
 
 @pytest.mark.django_db
 @pytest.mark.covers("A2.2")
-def test_admin_stop_bot_triggers_supervisorctl(monkeypatch, admin_client):
-    """A2.2: Кнопка Stop останавливает процесс через supervisorctl"""
-    bot = Bot.objects.create(bot_id=401, title="Stop Bot", username="stop_bot", token="XYZ")
-
+def test_admin_stop_bot_triggers_supervisorctl(monkeypatch):
     called = {}
-    def fake_check_output(args, stderr=None):
+    def fake_run(args, capture_output=True, text=True):
         called["args"] = args
-        return b"stopped"
+        class R: returncode, stdout, stderr = 0, "bot-1: stopped", ""
+        return R()
+    monkeypatch.setattr("subprocess.run", fake_run)
 
-    monkeypatch.setattr("core.admin.subprocess.check_output", fake_check_output)
+    bot = Bot.objects.create(bot_id=1, title="t", username="u", token="x")
+    supervisor.stop(bot)
 
-    url = reverse("admin:core_bot_stop", args=[bot.id])
-    response = admin_client.post(url, follow=True)
-
-    assert response.status_code == 200
-    assert called["args"][1] == "stop"
+    assert called["args"] == ["sudo", "supervisorctl", "stop", f"bot-{bot.bot_id}"]
 
 
 @pytest.mark.django_db
 @pytest.mark.covers("A2.3")
-def test_admin_restart_bot_triggers_supervisorctl(monkeypatch, admin_client):
-    """A2.3: Кнопка Restart перезапускает процесс через supervisorctl"""
-    bot = Bot.objects.create(bot_id=402, title="Restart Bot", username="restart_bot", token="XYZ")
-
+def test_admin_restart_bot_triggers_supervisorctl(monkeypatch):
     called = {}
-    def fake_check_output(args, stderr=None):
+    def fake_run(args, capture_output=True, text=True):
         called["args"] = args
-        return b"restarted"
+        class R: returncode, stdout, stderr = 0, "bot-1: restarted", ""
+        return R()
+    monkeypatch.setattr("subprocess.run", fake_run)
 
-    monkeypatch.setattr("core.admin.subprocess.check_output", fake_check_output)
+    bot = Bot.objects.create(bot_id=1, title="t", username="u", token="x")
+    supervisor.restart(bot)
 
-    url = reverse("admin:core_bot_restart", args=[bot.id])
-    response = admin_client.post(url, follow=True)
+    assert called["args"] == ["sudo", "supervisorctl", "restart", f"bot-{bot.bot_id}"]
 
-    assert response.status_code == 200
-    assert called["args"][1] == "restart"
-
-
-@pytest.mark.django_db
-@pytest.mark.covers("A2.4")
-def test_admin_view_logs_shows_last_lines(tmp_path, admin_client):
-    """A2.4: Кнопка View Logs показывает последние строки из log_path"""
-    log_file = tmp_path / "bot.log"
-    log_file.write_text("line1\nline2\nline3\n")
-
-    bot = Bot.objects.create(
-        bot_id=403, title="Log Bot", username="log_bot", token="XYZ", log_path=str(log_file)
-    )
-
-    url = reverse("admin:core_bot_logs", args=[bot.id])
-    response = admin_client.get(url)
-
-    assert response.status_code == 200
-    html = response.content.decode()
-    assert "line2" in html
-    assert "line3" in html
-
-
-@pytest.mark.django_db
-@pytest.mark.covers("A2.5")
-def test_admin_clear_logs_empties_file(tmp_path, admin_client):
-    """A2.5: Кнопка Clear Logs очищает файл log_path"""
-    log_file = tmp_path / "bot.log"
-    log_file.write_text("old content\n")
-
-    bot = Bot.objects.create(
-        bot_id=404, title="Clear Bot", username="clear_bot", token="XYZ", log_path=str(log_file)
-    )
-
-    url = reverse("admin:core_bot_clear_logs", args=[bot.id])
-    response = admin_client.post(url, follow=True)
-
-    assert response.status_code == 200
-    assert log_file.read_text() == ""

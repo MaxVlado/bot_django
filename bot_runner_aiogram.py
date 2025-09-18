@@ -3,30 +3,29 @@ import os
 import django
 import asyncio
 import logging
+import asyncpg
+import aiohttp
 
 from aiogram import Bot as AioBot, Dispatcher
-from aiogram.types import Message
-from aiogram.filters import Command
 from aiogram.webhook.aiohttp_server import setup_application, SimpleRequestHandler
 from aiohttp import web
 from aiogram.client.default import DefaultBotProperties
+
+from bot.subscriptions import register as register_subs
+from bot.config import settings
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "profiling.settings")
 django.setup()
 
 from core.models import Bot as BotModel
-from payments.models import MerchantConfig
 
-# --- basic logging ---
+
+# --- logging ---
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-
-async def start_handler(message: Message):
-    await message.answer("✅ Бот запущен и готов к работе!")
 
 
 def load_bot_config(bot_id: int):
@@ -35,23 +34,14 @@ def load_bot_config(bot_id: int):
     return bot, merchant
 
 
-async def run_longpoll(bot_model: BotModel):
-    """Dev режим: long-polling"""
-    dp = Dispatcher()
-    dp.message.register(start_handler, Command("start"))
-
-    bot = AioBot(
-        token=bot_model.token,
-        default=DefaultBotProperties(parse_mode="HTML")
-    )
-    logger.info(f"[DEV] Starting bot {bot_model.id} @{bot_model.username} in long-polling mode")
-    await dp.start_polling(bot)
-
-
 async def run_webhook(bot_model: BotModel):
     """Prod режим: webhook через aiohttp"""
     dp = Dispatcher()
-    dp.message.register(start_handler, Command("start"))
+
+    pool = await asyncpg.create_pool(dsn=settings.database_url)
+    session = aiohttp.ClientSession()
+
+    register_subs(dp, pool=pool, session=session)
 
     bot = AioBot(
         token=bot_model.token,
@@ -74,33 +64,9 @@ async def run_webhook(bot_model: BotModel):
     )
     await site.start()
 
-    # Блокировка
-    while True:
-        await asyncio.sleep(3600)
-
-
-def main():
-    if "--bot-id" not in sys.argv:
-        print("Usage: bot_runner_aiogram.py --bot-id <id> [--dev]")
-        sys.exit(1)
-
-    bot_id = int(sys.argv[sys.argv.index("--bot-id") + 1])
-    bot_model, merchant = load_bot_config(bot_id)
-
-    if not bot_model.is_enabled:
-        print(f"Bot {bot_id} is disabled.")
-        sys.exit(0)
-
-    dev_mode = "--dev" in sys.argv
-
     try:
-        if dev_mode:
-            asyncio.run(run_longpoll(bot_model))
-        else:
-            asyncio.run(run_webhook(bot_model))
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped")
-
-
-if __name__ == "__main__":
-    main()
+        while True:
+            await asyncio.sleep(3600)
+    finally:
+        await session.close()
+        await pool.close()

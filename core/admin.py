@@ -183,18 +183,12 @@ class BotAdmin(admin.ModelAdmin):
             self.message_user(request, f"Error: {e}", messages.ERROR)
         return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
-    
+
+
+
     def view_out_logs(self, request, bot_id, *args, **kwargs):
-        log_file = f"/var/www/astrocryptov_usr/data/logs/bot_{bot_id}.out.log"
-        try:
-            with open(log_file, "r") as f:
-                lines = f.readlines()[-50:]
-            return HttpResponse("<br>".join(lines))
-        except Exception as e:
-            return HttpResponse(f"Error: {e}", status=500)
-    
-    def view_err_logs(self, request, bot_id, *args, **kwargs):
-        log_file = f"/var/www/astrocryptov_usr/data/logs/bot_{bot_id}.err.log"
+        bot = get_object_or_404(Bot, pk=bot_id)
+        log_file = f"{bot.log_path}.out.log"
         try:
             with open(log_file, "r") as f:
                 lines = f.readlines()[-50:]
@@ -202,9 +196,19 @@ class BotAdmin(admin.ModelAdmin):
         except Exception as e:
             return HttpResponse(f"Error: {e}", status=500)
 
-    
+    def view_err_logs(self, request, bot_id, *args, **kwargs):
+        bot = get_object_or_404(Bot, pk=bot_id)
+        log_file = f"{bot.log_path}.err.log"
+        try:
+            with open(log_file, "r") as f:
+                lines = f.readlines()[-50:]
+            return HttpResponse("<br>".join(lines))
+        except Exception as e:
+            return HttpResponse(f"Error: {e}", status=500)
+
     def clear_out_logs(self, request, bot_id, *args, **kwargs):
-        log_file = f"/var/www/astrocryptov_usr/data/logs/bot_{bot_id}.out.log"
+        bot = get_object_or_404(Bot, pk=bot_id)
+        log_file = f"{bot.log_path}.out.log"
         try:
             open(log_file, "w").close()
             self.message_user(request, "Out logs cleared", messages.SUCCESS)
@@ -213,7 +217,8 @@ class BotAdmin(admin.ModelAdmin):
         return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
     def clear_err_logs(self, request, bot_id, *args, **kwargs):
-        log_file = f"/var/www/astrocryptov_usr/data/logs/bot_{bot_id}.err.log"
+        bot = get_object_or_404(Bot, pk=bot_id)
+        log_file = f"{bot.log_path}.err.log"
         try:
             open(log_file, "w").close()
             self.message_user(request, "Err logs cleared", messages.SUCCESS)

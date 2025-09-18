@@ -1,41 +1,55 @@
+# botops/supervisor.py
 import subprocess
 from pathlib import Path
-from core.models import Bot
 
-# По умолчанию supervisor конфиги лежат здесь,
-# но в тестах мы будем подменять SUPERVISOR_DIR на tmp_path
 SUPERVISOR_DIR = Path("/etc/supervisor/conf.d")
 
 
-def generate_config(bot: Bot) -> str:
-    """Генерирует текст supervisor-конфига для данного бота"""
-    return f"""[program:bot-{bot.bot_id}]
-command=/opt/venvs/bots/bin/python /path/to/bot_runner.py --bot-id {bot.bot_id}
+def generate_config(bot):
+    return f"""
+[program:bot-{bot.bot_id}]
+command=/opt/venvs/dev-astrovoyager/bin/python /var/www/astrocryptov_usr/data/www/dev.astrocryptovoyager.com/bot_runner_aiogram.py --bot-id {bot.bot_id}
 directory=/var/www/astrocryptov_usr/data/www/dev.astrocryptovoyager.com
-autostart=false
+autostart=true
 autorestart=true
-stderr_logfile={bot.log_path}.err.log
-stdout_logfile={bot.log_path}.out.log
-"""
+stderr_logfile={bot.log_path}
+stdout_logfile={bot.log_path}
+user=www-data
+""".strip()
 
 
-def write_config(bot: Bot) -> Path:
-    """Сохраняет конфиг в файл supervisor"""
+def write_config(bot):
     config_text = generate_config(bot)
-    path = SUPERVISOR_DIR / f"bot_{bot.bot_id}.conf"
+    path = SUPERVISOR_DIR / f"bot-{bot.bot_id}.conf"
     path.write_text(config_text)
     return path
 
 
-def get_status(bot: Bot) -> str:
-    """Запрашивает статус процесса у supervisorctl и обновляет bot.status"""
-    try:
-        output = subprocess.check_output(["supervisorctl", "status", f"bot-{bot.bot_id}"])
-        status = output.decode().split()[1]  # RUNNING / STOPPED / STARTING и т.д.
-        bot.status = status
-        bot.save(update_fields=["status"])
-        return status
-    except Exception:
-        bot.status = "failed"
-        bot.save(update_fields=["status"])
-        return "failed"
+def _run(args):
+    """Запуск supervisorctl (с sudo) и возврат stdout/stderr."""
+    result = subprocess.run(args, capture_output=True, text=True)
+    return (result.stdout or result.stderr).strip()
+
+
+def get_status(bot):
+    output = _run(["sudo", "supervisorctl", "status", f"bot-{bot.bot_id}"])
+    if "RUNNING" in output:
+        bot.status = "RUNNING"
+    elif "STOPPED" in output:
+        bot.status = "STOPPED"
+    else:
+        bot.status = "UNKNOWN"
+    bot.save(update_fields=["status"])
+    return bot.status
+
+
+def start(bot):
+    return _run(["sudo", "supervisorctl", "start", f"bot-{bot.bot_id}"])
+
+
+def stop(bot):
+    return _run(["sudo", "supervisorctl", "stop", f"bot-{bot.bot_id}"])
+
+
+def restart(bot):
+    return _run(["sudo", "supervisorctl", "restart", f"bot-{bot.bot_id}"])
