@@ -50,18 +50,13 @@ class BotAdmin(admin.ModelAdmin):
 
             '    <a class="button" href="{}">View Out Logs</a>'
             '    <a class="button" href="{}">View Err Logs</a><br>'
-            '    <a class="button" href="{}">Clear Out Logs</a>'
-            '    <a class="button" href="{}">Clear Err Logs</a>'
-             
             '</div>',
             f"{obj.id}/start/",
             f"{obj.id}/stop/",
             f"{obj.id}/restart/",
             reverse("admin:core_restart_django"),
             f"{obj.id}/logs/out/",
-            f"{obj.id}/logs/err/",
-            f"{obj.id}/clear_logs/out/",
-            f"{obj.id}/clear_logs/err/",
+            f"{obj.id}/logs/err/",            
         )
     
     
@@ -76,24 +71,50 @@ class BotAdmin(admin.ModelAdmin):
             path("<int:bot_id>/restart/", self.admin_site.admin_view(self.restart_bot), name="core_bot_restart"),
             path("<int:bot_id>/logs/out/", self.admin_site.admin_view(self.view_out_logs), name="core_bot_logs_out"),
             path("<int:bot_id>/logs/err/", self.admin_site.admin_view(self.view_err_logs), name="core_bot_logs_err"),
-            path("<int:bot_id>/clear_logs/out/", self.admin_site.admin_view(self.clear_out_logs), name="core_bot_clear_logs_out"),
-            path("<int:bot_id>/clear_logs/err/", self.admin_site.admin_view(self.clear_err_logs), name="core_bot_clear_logs_err"),
             path("restart_django/", self.admin_site.admin_view(self.restart_django), name="core_restart_django"),
 
         ]
         return custom_urls + urls
 
     def supervisorctl(self, command, bot_id):
-        program = f"bot-{bot_id}"
+        program = f"bot_{bot_id}"
         return subprocess.check_output(
-            ["sudo", "supervisorctl", command, program],
+            ["sudo", "-u", "astrocryptov_usr", "supervisorctl", command, program],
             stderr=subprocess.STDOUT
         )
+
+    def start_bot(self, request, bot_id, *args, **kwargs):
+        bot = get_object_or_404(Bot, pk=bot_id)
+        try:
+            output = self.supervisorctl("start", bot.bot_id)
+            self.message_user(request, f"Started: {output.decode()}", messages.SUCCESS)
+        except Exception as e:
+            self.message_user(request, f"Error: {e}", messages.ERROR)
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
+
+    def stop_bot(self, request, bot_id, *args, **kwargs):
+        bot = get_object_or_404(Bot, pk=bot_id)
+        try:
+            output = self.supervisorctl("stop", bot.bot_id)
+            self.message_user(request, f"Stopped: {output.decode()}", messages.SUCCESS)
+        except Exception as e:
+            self.message_user(request, f"Error: {e}", messages.ERROR)
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
+
+    def restart_bot(self, request, bot_id, *args, **kwargs):
+        bot = get_object_or_404(Bot, pk=bot_id)
+        try:
+            output = self.supervisorctl("restart", bot.bot_id)
+            self.message_user(request, f"Restarted: {output.decode()}", messages.SUCCESS)
+        except Exception as e:
+            self.message_user(request, f"Error: {e}", messages.ERROR)
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
+
 
     def live_status(self, obj):
         try:
             result = subprocess.run(
-                ["sudo", "supervisorctl", "status", f"bot-{obj.bot_id}"],
+                ["sudo", "supervisorctl", "status", f"bot_{obj.bot_id}"],
                 capture_output=True, text=True
             )
             output = result.stdout.strip()
@@ -156,35 +177,6 @@ class BotAdmin(admin.ModelAdmin):
             self.message_user(request, f"Error: {e}", messages.ERROR)
             return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
-    def start_bot(self, request, bot_id, *args, **kwargs):
-        bot = get_object_or_404(Bot, pk=bot_id)
-        try:
-            output = self.supervisorctl("start", bot.bot_id)
-            self.message_user(request, f"Started: {output.decode()}", messages.SUCCESS)
-        except Exception as e:
-            self.message_user(request, f"Error: {e}", messages.ERROR)
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
-
-    def stop_bot(self, request, bot_id, *args, **kwargs):
-        bot = get_object_or_404(Bot, pk=bot_id)
-        try:
-            output = self.supervisorctl("stop", bot.bot_id)
-            self.message_user(request, f"Stopped: {output.decode()}", messages.SUCCESS)
-        except Exception as e:
-            self.message_user(request, f"Error: {e}", messages.ERROR)
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
-
-    def restart_bot(self, request, bot_id, *args, **kwargs):
-        bot = get_object_or_404(Bot, pk=bot_id)
-        try:
-            output = self.supervisorctl("restart", bot.bot_id)
-            self.message_user(request, f"Restarted: {output.decode()}", messages.SUCCESS)
-        except Exception as e:
-            self.message_user(request, f"Error: {e}", messages.ERROR)
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
-
-
-
 
     def view_out_logs(self, request, bot_id, *args, **kwargs):
         bot = get_object_or_404(Bot, pk=bot_id)
@@ -206,26 +198,7 @@ class BotAdmin(admin.ModelAdmin):
         except Exception as e:
             return HttpResponse(f"Error: {e}", status=500)
 
-    def clear_out_logs(self, request, bot_id, *args, **kwargs):
-        bot = get_object_or_404(Bot, pk=bot_id)
-        log_file = f"{bot.log_path}.out.log"
-        try:
-            open(log_file, "w").close()
-            self.message_user(request, "Out logs cleared", messages.SUCCESS)
-        except Exception as e:
-            self.message_user(request, f"Error: {e}", messages.ERROR)
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
-
-    def clear_err_logs(self, request, bot_id, *args, **kwargs):
-        bot = get_object_or_404(Bot, pk=bot_id)
-        log_file = f"{bot.log_path}.err.log"
-        try:
-            open(log_file, "w").close()
-            self.message_user(request, "Err logs cleared", messages.SUCCESS)
-        except Exception as e:
-            self.message_user(request, f"Error: {e}", messages.ERROR)
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
-
+    
 
 class ActiveStatusFilter(admin.SimpleListFilter):
     title = "Active"
