@@ -6,12 +6,17 @@ from django.http import HttpResponseRedirect, HttpResponse
 from django.contrib import admin, messages
 from django.shortcuts import get_object_or_404
 from django.utils.html import format_html
+from django.conf import settings
+from django.db import models
+
+
 
 
 class MerchantConfigInline(admin.StackedInline):
     model = MerchantConfig
     can_delete = False
     extra = 0
+
 
 
 @admin.register(Bot)
@@ -79,12 +84,12 @@ class BotAdmin(admin.ModelAdmin):
     def supervisorctl(self, command, bot_id):
         program = f"bot_{bot_id}"
         return subprocess.check_output(
-            ["sudo", "-u", "astrocryptov_usr", "supervisorctl", command, program],
+            ["sudo",  "supervisorctl", command, program],
             stderr=subprocess.STDOUT
         )
 
     def start_bot(self, request, bot_id, *args, **kwargs):
-        bot = get_object_or_404(Bot, pk=bot_id)
+        bot = get_object_or_404(Bot, bot_id=bot_id)
         try:
             output = self.supervisorctl("start", bot.bot_id)
             self.message_user(request, f"Started: {output.decode()}", messages.SUCCESS)
@@ -226,3 +231,62 @@ class TelegramUserAdmin(admin.ModelAdmin):
         return not obj.is_blocked
     is_active_badge.boolean = True
     is_active_badge.short_description = "Is active"
+
+
+#  Django log viewer
+
+#  Django log viewer
+from django.contrib import admin, messages
+from django.urls import path, reverse
+from django.http import HttpResponse, HttpResponseRedirect
+from django.conf import settings
+from django.db import models
+
+def _view_django_log(request):
+    log_file = settings.LOG_DIR / "django.log"
+    try:
+        with open(log_file, "r") as f:
+            lines = f.readlines()[-200:]  # последние 200 строк
+        # простая страница + быстрая ссылка на очистку
+        clear_url = reverse("admin:core_clear_django_log")
+        html = f'<p><a class="button" href="{clear_url}">Очистить лог</a></p>' + "<br>".join(lines)
+        return HttpResponse(html)
+    except Exception as e:
+        return HttpResponse(f"Error: {e}", status=500)
+
+def _clear_django_log(request):
+    log_file = settings.LOG_DIR / "django.log"
+    try:
+        open(log_file, "w").close()
+        messages.success(request, "Django log cleared")
+    except Exception as e:
+        messages.error(request, f"Error: {e}")
+    return HttpResponseRedirect(reverse("admin:core_view_django_log"))
+
+class LogDummy(models.Model):
+    class Meta:
+        managed = False
+        app_label = "core"
+        verbose_name = "Django Logs"
+        verbose_name_plural = "Django Logs"
+
+@admin.register(LogDummy)
+class LogsAdmin(admin.ModelAdmin):
+    """Пункт в главном меню админки без доступа к БД."""
+    # запретим любые CRUD
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+
+    # при клике по пункту меню сразу уводим на просмотр лога
+    def changelist_view(self, request, extra_context=None):
+        return HttpResponseRedirect(reverse("admin:core_view_django_log"))
+
+    # добавляем ровно два url: просмотр и очистка
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path("django/", self.admin_site.admin_view(_view_django_log), name="core_view_django_log"),
+            path("django/clear/", self.admin_site.admin_view(_clear_django_log), name="core_clear_django_log"),
+        ]
+        return custom + urls

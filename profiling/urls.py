@@ -1,5 +1,4 @@
-
-
+# profiling/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
@@ -8,6 +7,7 @@ def health_view(request):
     return JsonResponse({"status": "ok"})
 
 urlpatterns = [
+    path("", health_view, name="root"), 
     path("admin/", admin.site.urls),
     path("health/", health_view), 
     # WayForPay endpoints (из payments/wayforpay/urls.py)

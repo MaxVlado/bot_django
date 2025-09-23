@@ -143,7 +143,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
 # Логирование
-LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR = BASE_DIR / 'botlogs'
 LOG_DIR.mkdir(exist_ok=True)
 
 LOGGING = {

@@ -1,13 +1,39 @@
 # bot/keyboards.py
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from collections.abc import Mapping
 
 def kb_back() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="⬅ Назад", callback_data="ui:back")]]
     )
 
+
+
 def _rec_get(rec, key, default=None):
-    return rec.get(key, default) if isinstance(rec, dict) else getattr(rec, key, default)
+    """
+    Поддержка dict, asyncpg.Record и прочих Mapping.
+    Порядок:
+      1) dict.get
+      2) Mapping[key] / .get(key)
+      3) rec[key] (для asyncpg.Record)
+      4) getattr(rec, key, default)
+    """
+    try:
+        if isinstance(rec, dict):
+            return rec.get(key, default)
+
+        if isinstance(rec, Mapping):
+            # у asyncpg.Record нет .get, но есть __getitem__ и .keys()
+            return rec.get(key, default) if hasattr(rec, "get") else (rec[key] if key in rec else default)
+
+        if hasattr(rec, "keys"):  # asyncpg.Record
+            if key in rec.keys():
+                return rec[key]
+
+        return getattr(rec, key, default)
+    except Exception:
+        return default
+
 
 def _rec_enabled(rec) -> bool:
     # Если ключа нет — считаем включённым (совместимость с тестами/моками)
