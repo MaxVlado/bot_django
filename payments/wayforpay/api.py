@@ -36,7 +36,6 @@ class WayForPayAPI:
     
     def __init__(self, bot_id: int = None):
         if bot_id:
-            # Получаем настройки из MerchantConfig
             from payments.models import MerchantConfig
             try:
                 config = MerchantConfig.objects.select_related('bot').get(bot__bot_id=bot_id)
@@ -44,16 +43,22 @@ class WayForPayAPI:
                 self.secret_key = config.secret_key
                 self.payment_url = config.pay_url
                 self.api_url = config.api_url
-                self.domain_name = config.bot.domain_name or settings.WAYFORPAY_DOMAIN_NAME
+                # Добавляем недостающие атрибуты
+                self.domain_name = config.bot.domain_name or "dev.astrocryptovoyager.com"
                 self.return_url = f"https://{self.domain_name}/api/payments/wayforpay/return/"
                 self.service_url = f"https://{self.domain_name}/api/payments/wayforpay/webhook/"
             except MerchantConfig.DoesNotExist:
                 raise ValueError(f"MerchantConfig not found for bot_id={bot_id}")
         else:
-            # Fallback на Django settings (для совместимости)
+            # Fallback на Django settings
+            from django.conf import settings
             self.merchant_account = settings.WAYFORPAY_MERCHANT_ACCOUNT
             self.secret_key = settings.WAYFORPAY_SECRET_KEY
-           
+            self.domain_name = settings.WAYFORPAY_DOMAIN_NAME
+            self.return_url = settings.WAYFORPAY_RETURN_URL
+            self.service_url = settings.WAYFORPAY_SERVICE_URL
+            self.payment_url = getattr(settings, "WAYFORPAY_PAY_URL", "https://secure.wayforpay.com/pay")
+            self.api_url = getattr(settings, "WAYFORPAY_API_URL", "https://api.wayforpay.com/api")
 
     @staticmethod
     def _join(parts: List[str]) -> str:

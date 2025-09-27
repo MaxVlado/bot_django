@@ -19,15 +19,15 @@ from .notifications import (
 from .keyboards import kb_plans
 
 # ----------------------------- CONFIG -----------------------------
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-BOT_ID = int(os.getenv("BOT_ID", "1"))  # должен совпадать с Plan.bot_id
-API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8000/api/payments/wayforpay")
+# BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+# BOT_ID = int(os.getenv("BOT_ID", "1"))  # должен совпадать с Plan.bot_id
+# API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8000/api/payments/wayforpay")
 
-DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
-DB_PORT = int(os.getenv("DB_PORT", "5432"))
-DB_NAME = os.getenv("DB_NAME", "wayforpay_db")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+# DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+# DB_PORT = int(os.getenv("DB_PORT", "5432"))
+# DB_NAME = os.getenv("DB_NAME", "wayforpay_db")
+# DB_USER = os.getenv("DB_USER", "postgres")
+# DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 
 TZ = "Europe/Kyiv"
 
@@ -163,55 +163,59 @@ async def on_renew(cb, pool):
     await cb.message.edit_text("Выберите тариф для продления:", reply_markup=kb)
     await cb.answer()
 
-async def on_pay(cb: CallbackQuery, session: aiohttp.ClientSession):
-    # парсим plan_id
-    try:
-        _, pid = cb.data.split(":")
-        plan_id = int(pid)
-    except Exception:
-        await cb.answer("Некорректный тариф", show_alert=True)
-        return
+# async def on_pay(cb: CallbackQuery, session: aiohttp.ClientSession, pool):
+#     # парсим plan_id
+#     try:
+#         _, pid = cb.data.split(":")
+#         plan_id = int(pid)
+#     except Exception:
+#         await cb.answer("Некорректный тариф", show_alert=True)
+#         return
 
-    payload = {"bot_id": BOT_ID, "user_id": cb.from_user.id, "plan_id": plan_id}
-    url = f"{API_BASE}/create-invoice/"
+#     # Получаем django_api_base из MerchantConfig
+#     try:
+#         django_api_base = await pool.fetchval(
+#             "SELECT django_api_base FROM merchant_configs mc JOIN core_bot b ON b.id = mc.bot_id WHERE b.bot_id = $1",
+#             BOT_ID
+#         )
+#         if not django_api_base:
+#             raise ValueError("MerchantConfig not found")
+#     except Exception as e:
+#         log.error("Failed to get django_api_base for bot_id=%s: %r", BOT_ID, e)
+#         await cb.answer("Ошибка конфигурации", show_alert=True)
+#         return
 
-    try:
-        async with session.post(url, json=payload, timeout=20) as resp:
-            data = await resp.json()
-    except Exception as e:
-        # Лог с контекстом: bot_id, user_id, plan_id (для caplog-теста B10.2)
-        log.exception(
-            "create-invoice failed: bot_id=%s user_id=%s plan_id=%s error=%r",
-            BOT_ID, cb.from_user.id, plan_id, e,
-        )
-        await cb.answer("Ошибка запроса", show_alert=True)
-        return
+#     payload = {"bot_id": BOT_ID, "user_id": cb.from_user.id, "plan_id": plan_id}
+#     url = f"{django_api_base}/create-invoice/"
 
-    if not data.get("ok"):
-        err = data.get("error", "unknown")
-        await cb.answer(f"Ошибка: {err}", show_alert=True)
-        return
+#     try:
+#         async with session.post(url, json=payload, timeout=20) as resp:
+#             data = await resp.json()
+#     except Exception as e:
+#         log.exception("create-invoice failed: bot_id=%s user_id=%s plan_id=%s error=%r",
+#             BOT_ID, cb.from_user.id, plan_id, e)
+#         await cb.answer("Ошибка запроса", show_alert=True)
+#         return
 
-    invoice_url = data["invoiceUrl"]
+#     if not data.get("ok"):
+#         err = data.get("error", "unknown")
+#         await cb.answer(f"Ошибка: {err}", show_alert=True)
+#         return
 
-    log.info(
-        "event=create_invoice_success bot_id=%s user_id=%s plan_id=%s",
-        BOT_ID, cb.from_user.id, plan_id,
-    )
+#     invoice_url = data["invoiceUrl"]
+#     log.info("event=create_invoice_success bot_id=%s user_id=%s plan_id=%s",
+#         BOT_ID, cb.from_user.id, plan_id)
 
+#     kb = InlineKeyboardMarkup(inline_keyboard=[
+#         [InlineKeyboardButton(text="💳 Оплатить", url=invoice_url)],
+#         [InlineKeyboardButton(text="⬅ Назад", callback_data="ui:back")]
+#     ])
 
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Оплатить", url=invoice_url)],
-            [InlineKeyboardButton(text="⬅ Назад", callback_data="ui:back")],
-        ]
-    )
-
-    await cb.message.edit_text(
-        "Перейдите по кнопке «Оплатить». После оплаты вернитесь и нажмите «Моя подписка» для проверки.",
-        reply_markup=kb
-    )
-    await cb.answer()
+#     await cb.message.edit_text(
+#         "Перейдите по кнопке «Оплатить». После оплаты вернитесь и нажмите «Моя подписка» для проверки.",
+#         reply_markup=kb
+#     )
+#     await cb.answer()
 
 async def on_help(cb: CallbackQuery):
     await cb.message.edit_text(
@@ -249,7 +253,7 @@ async def main() -> None:
     dp.callback_query.register(lambda c: on_renew(c, pool), F.data == "sub:renew")
     dp.callback_query.register(on_help, F.data == "help:open")
     dp.callback_query.register(on_back, F.data == "ui:back")
-    dp.callback_query.register(lambda c: on_pay(c, session), F.data.startswith("pay:"))
+    dp.callback_query.register(lambda c: on_pay(c, session, pool), F.data.startswith("pay:"))
 
     log.info("Bot started with BOT_ID=%s API_BASE=%s DB=%s@%s/%s", BOT_ID, API_BASE, DB_USER, DB_HOST, DB_NAME)
     try:

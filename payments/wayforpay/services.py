@@ -20,20 +20,21 @@ from payments.models import Invoice, PaymentStatus, VerifiedUser
 class WayForPayService:
     """Сервис WayForPay: создание инвойса, обработка вебхука, продление подписки, верификация."""
 
-    def __init__(self):
-        self.api = WayForPayAPI()
+    def __init__(self, bot_id: int = None):
+        self.bot_id = bot_id
+        self.api = WayForPayAPI(bot_id=bot_id)
 
     @transaction.atomic
     def create_invoice(self, bot_id: int, user_id: int, plan_id: int, amount: Optional[Decimal] = None) -> str:
-        """
-        Создать инвойс и вернуть URL оплаты.
-        Разрешаем создавать инвойс даже при активной подписке (для продления).
-        """
+        # Создай сервис с конкретным bot_id
+        service = WayForPayService(bot_id=bot_id)
+        
+        # Остальная логика остается той же...
         user, _ = TelegramUser.objects.get_or_create(
             user_id=user_id,
             defaults={"username": None, "first_name": None, "last_name": None},
         )
-
+        
         plan = Plan.objects.get(id=plan_id, bot_id=bot_id, enabled=True)
 
         order_reference = Invoice.generate_order_reference(bot_id, user_id, plan_id)

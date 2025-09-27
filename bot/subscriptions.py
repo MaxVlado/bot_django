@@ -107,7 +107,7 @@ async def on_pay(cb: types.CallbackQuery, session, bot_model):
         return
 
     payload = {"bot_id": bot_model.id, "user_id": cb.from_user.id, "plan_id": plan_id}
-    url = f"https://{bot_model.domain_name}/api/payments/wayforpay/create-invoice/"
+    url = f"{bot_model.merchant_config.django_api_base}/create-invoice/"
 
     try:
         async with session.post(url, json=payload, timeout=20) as resp:
