@@ -106,12 +106,21 @@ async def on_pay(cb: types.CallbackQuery, session, bot_model):
         await cb.answer("Некорректный тариф", show_alert=True)
         return
 
+    log.info(f"DEBUG: bot_model.id = {bot_model.id}")
+    log.info(f"DEBUG: django_api_base = {bot_model.merchant_config.django_api_base}")
+    
+
     payload = {"bot_id": bot_model.id, "user_id": cb.from_user.id, "plan_id": plan_id}
     url = f"{bot_model.merchant_config.django_api_base}/create-invoice/"
 
+    log.info(f"DEBUG: POST URL = {url}")
+    log.info(f"DEBUG: payload = {payload}")
+
     try:
         async with session.post(url, json=payload, timeout=20) as resp:
+            log.info(f"DEBUG: HTTP status = {resp.status}")
             data = await resp.json()
+            log.info(f"DEBUG: response data = {data}")
     except Exception as e:
         log.exception(
             "create-invoice failed: bot_id=%s user_id=%s plan_id=%s error=%r",

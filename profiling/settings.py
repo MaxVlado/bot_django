@@ -123,18 +123,6 @@ else:
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# WayForPay настройки (без отдельного приложения; код интеграции будет в payments/)
-WAYFORPAY_MERCHANT_ACCOUNT = os.environ.get('WAYFORPAY_MERCHANT_ACCOUNT', 'test_merch_n1')
-WAYFORPAY_SECRET_KEY = os.environ.get('WAYFORPAY_SECRET_KEY', 'flk3409refn54t54t*FNJRET')
-WAYFORPAY_DOMAIN_NAME = os.environ.get('WAYFORPAY_DOMAIN_NAME', 'yourdomain.com')
-WAYFORPAY_RETURN_URL = os.environ.get('WAYFORPAY_RETURN_URL', 'https://yourdomain.com/wayforpay/return/')
-WAYFORPAY_SERVICE_URL = os.environ.get('WAYFORPAY_SERVICE_URL', 'https://yourdomain.com/wayforpay/webhook/')
-WAYFORPAY_API_URL = os.environ.get('WAYFORPAY_API_URL', 'https://api.wayforpay.com/api')
-WAYFORPAY_PAY_URL = os.environ.get('WAYFORPAY_PAY_URL', 'https://secure.wayforpay.com/pay')
-
-WAYFORPAY_VERIFY_SIGNATURE = os.getenv("WAYFORPAY_VERIFY_SIGNATURE", "True").lower() == "true"
-
-
 # Celery (опционально; если не используешь — параметры не мешают)
 CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379')
 CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL', 'redis://localhost:6379')
@@ -177,3 +165,17 @@ LOGGING = {
         'level': os.environ.get('LOG_LEVEL', 'INFO'),
     },
 }
+
+# WayForPay настройки
+# Эти параметры берутся из bot/config.py, чтобы не дублировать в двух местах
+from bot.config import settings as bot_settings
+
+# WayForPay настройки из bot/config.py
+WAYFORPAY_MERCHANT_ACCOUNT = bot_settings.wayforpay_merchant_account
+WAYFORPAY_SECRET_KEY = bot_settings.wayforpay_secret_key
+WAYFORPAY_DOMAIN_NAME = bot_settings.wayforpay_domain_name
+WAYFORPAY_RETURN_URL = bot_settings.wayforpay_return_url
+WAYFORPAY_SERVICE_URL = bot_settings.wayforpay_service_url
+WAYFORPAY_API_URL = bot_settings.wayforpay_api_url
+WAYFORPAY_PAY_URL = bot_settings.wayforpay_pay_url
+WAYFORPAY_VERIFY_SIGNATURE = bot_settings.wayforpay_verify_signature

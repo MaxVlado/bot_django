@@ -32,5 +32,6 @@ botlogs/
 # Документация (если не нужна в репо)
 docs/
 temp/
+uml/
 *.md
 .git.bfg-report/
