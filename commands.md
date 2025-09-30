@@ -46,5 +46,5 @@ EOF
 
 # Для использования в новых сессиях:
 # source /tmp/django_deploy_vars.sh
-
+/opt/venvs/dev-astrovoyager/bin/python manage.py makemigrations subscriptions
 /opt/venvs/dev-astrovoyager/bin/python manage.py 

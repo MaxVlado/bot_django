@@ -131,58 +131,95 @@ class WayForPayService:
                     
         except Exception as e:
             raise ValueError(f"Failed to create invoice: {e}")
-        
+      
+    # payments/wayforpay/services.py
+
     @transaction.atomic
     def handle_webhook(self, payload: Dict) -> Dict:
-        """Обработка webhook точно как в PHP коде"""
+        """
+        Обработка webhook с новым форматом orderReference: ORDER_timestamp+rand_user_plan
+        """
         import logging
         logger = logging.getLogger(__name__)
         
         logger.info(f'Received webhook from WayForPay: {payload}')
         
-        # 1. Проверка подписи (как в PHP)
-        if not self.api.validate_response_signature(payload):
+        # 1. Проверка подписи (если включена)
+        from django.conf import settings
+        
+        verify_signature = getattr(settings, 'WAYFORPAY_VERIFY_SIGNATURE', True)
+        
+        if verify_signature and not self.api.validate_response_signature(payload):
             logger.error('Invalid signature from WayForPay')
             return {"status": "error", "message": "Invalid signature"}
         
-        # 2. Проверка валюты (как в PHP)
+        # 2. Проверка валюты
         if payload.get('currency') != 'UAH':
             logger.warning(f"Invalid currency: {payload.get('currency')}")
             return {"message": "Unsupported currency"}
         
-        # 3. Парсинг orderReference (как в PHP)
-        order_reference = payload.get('orderReference')
-        try:
-            user_id, plan_id, parts_count = self.api.parse_order_reference(order_reference)
-            logger.info(f"Parsed user_id={user_id}, plan_id={plan_id} from orderReference: {order_reference}")
-        except ValueError as e:
-            logger.warning(str(e))
-            return {"status": "skipped", "message": "Invalid orderReference format"}
+        # 3. Получаем orderReference
+        order_reference = payload.get('orderReference', '').strip().rstrip(';')
         
-        # 4. Получаем plan и bot_id (как в PHP)
+        if not order_reference:
+            logger.error("orderReference is missing")
+            return {"status": "error", "message": "orderReference required"}
+        
+        # 4. Парсинг orderReference
+        try:
+            user_id, plan_id, timestamp = self.api.parse_order_reference(order_reference)
+            logger.info(f"✅ Parsed: user_id={user_id}, plan_id={plan_id}, timestamp={timestamp}")
+            
+        except ValueError as e:
+            logger.error(f"❌ Parse failed: {e}")
+            
+            # FALLBACK: прямой поиск Invoice (на случай миграции или ручного создания)
+            logger.info(f"🔍 Trying fallback: direct Invoice lookup")
+            
+            invoice = Invoice.objects.filter(
+                order_reference=order_reference
+            ).select_related('user', 'plan').first()
+            
+            if not invoice:
+                logger.error(f"❌ Invoice not found: {order_reference}")
+                return {"status": "error", "message": "Invoice not found"}
+            
+            user_id = invoice.user_id
+            plan_id = invoice.plan_id
+            bot_id = invoice.bot_id
+            
+            logger.info(f"✅ Fallback success: user_id={user_id}, plan_id={plan_id}, bot_id={bot_id}")
+            
+            # Переходим к обработке
+            base_reference = order_reference.split('_WFPREG-')[0]
+            return self._process_payment_status(payload, user_id, plan_id, bot_id, base_reference)
+        
+        # 5. Получаем Plan и bot_id
         from subscriptions.models import Plan
         plan = Plan.objects.filter(id=plan_id, enabled=True).first()
+        
         if not plan:
-            return {"message": "Plan not available"}
+            logger.error(f"Plan {plan_id} not found or disabled")
+            return {"status": "error", "message": "Plan not available"}
         
         bot_id = plan.bot_id
+        logger.info(f"Bot ID from plan: {bot_id}")
         
-        # 5. Проверка дубликатов (как в PHP)
-        base_reference = order_reference.split('_WFPREG-')[0]  # PHP логика
+        # 6. Проверка дубликатов
+        base_reference = order_reference.split('_WFPREG-')[0]
+        
         existing_invoice = Invoice.objects.filter(
             order_reference=base_reference,
             payment_status=PaymentStatus.APPROVED
         ).first()
         
         if existing_invoice:
-            logger.info(f"Webhook duplicated for orderReference {order_reference} - already success")
-            # Обновляем поля как в PHP
+            logger.info(f"🔄 Duplicate webhook for: {order_reference}")
             self._update_invoice_fields(existing_invoice, payload)
             return {"status": "accepted"}
         
-        # 6. Продолжаем обработку...
+        # 7. Обработка платежа
         return self._process_payment_status(payload, user_id, plan_id, bot_id, base_reference)
-   
     def _update_invoice_fields(self, invoice: Invoice, payload: Dict):
             """Обновление полей инвойса как в PHP коде"""
             invoice.phone = invoice.phone or payload.get('phone')
@@ -199,26 +236,37 @@ class WayForPayService:
             invoice.save()
    
     def _process_payment_status(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str) -> Dict:
-        """Обработка статуса платежа как в PHP коде"""
+        """Обработка статуса платежа с нормализацией"""
         import logging
         from django.utils import timezone
         from subscriptions.models import Plan, Subscription
         from core.models import TelegramUser
         
         logger = logging.getLogger(__name__)
-        transaction_status = payload.get('transactionStatus')
         
-        if transaction_status == 'Approved':
+        # ДОБАВЛЕНО: нормализация статуса (case-insensitive)
+        transaction_status = payload.get('transactionStatus', '').upper()
+        
+        # Проверяем, что план всё ещё доступен
+        plan = Plan.objects.filter(id=plan_id, enabled=True).first()
+        if not plan:
+            logger.warning(f"Plan {plan_id} is no longer available")
+            return {"status": "error", "message": "Plan not available"}
+        
+        if transaction_status == 'APPROVED':
             return self._handle_approved_payment(payload, user_id, plan_id, bot_id, base_reference)
-        else:
+        elif transaction_status in ['DECLINED', 'EXPIRED', 'CANCELED']:
             return self._handle_declined_payment(payload, user_id, plan_id, bot_id, base_reference)
-
+        else:
+            logger.warning(f"Unknown transaction status: {transaction_status}")
+            return {"status": "error", "message": f"Unknown status: {transaction_status}"} 
+        
     def _handle_approved_payment(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str) -> Dict:
-        """Обработка успешного платежа - точно как в PHP"""
+        """Обработка успешного платежа"""
         import logging
         from django.utils import timezone
         from datetime import timedelta
-        from subscriptions.models import Plan, Subscription
+        from subscriptions.models import Plan, Subscription, SubscriptionStatus
         from core.models import TelegramUser
         from payments.models import VerifiedUser
         
@@ -229,25 +277,25 @@ class WayForPayService:
         user, _ = TelegramUser.objects.get_or_create(user_id=user_id)
         
         amount = float(payload.get('amount', 0))
-        duration_days = plan.duration_days if plan else 30
+        duration_days = plan.duration_days
+        transaction_id = payload.get('transactionId')
         
-        # Определяем дату начала (как в PHP)
+        # Дата начала
         starts_from = timezone.now()
-        if plan.start_date and timezone.now() < plan.start_date:
-            starts_from = plan.start_date
         
-        # Работа с подпиской (как в PHP)
+        # Работа с подпиской
         subscription, created = Subscription.objects.get_or_create(
             bot_id=bot_id,
             user_id=user_id,
             defaults={
                 'user': user,
                 'plan': plan,
-                'starts_at': starts_from.date(),
-                'expires_at': (starts_from + timedelta(days=duration_days)).date(),
-                'status': 'active',
+                'starts_at': starts_from,
+                'expires_at': starts_from + timedelta(days=duration_days),
+                'status': SubscriptionStatus.ACTIVE,
                 'amount': amount,
                 'order_reference': base_reference,
+                'transaction_id': transaction_id,
             }
         )
         
@@ -259,44 +307,50 @@ class WayForPayService:
             # Продление существующей
             logger.info(f"Extending subscription for user {user_id}")
             self._extend_subscription(subscription, duration_days)
-        
-        # Создаем/обновляем инвойс (как в PHP)
+            
+            # Обновляем данные последнего платежа
+            subscription.amount = amount
+            subscription.order_reference = base_reference
+            subscription.transaction_id = transaction_id
+            subscription.save()
+    
+        # Создаем/обновляем инвойс
         self._update_or_create_invoice(base_reference, payload, bot_id, user_id, plan_id, amount, 'APPROVED')
         
-        # Создаем/обновляем VerifiedUser (как в PHP)
+        # Создаем/обновляем VerifiedUser
         self._update_verified_user(bot_id, user_id, payload)
         
-        # Проверяем debounce и отправляем уведомление (как в PHP)
+        # Проверяем debounce и отправляем уведомление
         self._handle_payment_notification(bot_id, user_id, plan_id, base_reference, subscription)
         
         return {"status": "accepted"}
     
     def _setup_new_subscription(self, subscription: Subscription, payload: Dict, duration_days: int):
-        """Настройка новой подписки как в PHP"""
+        """Настройка новой подписки"""
         import logging
         from django.utils import timezone
         from datetime import timedelta
         
         logger = logging.getLogger(__name__)
         
-        # Регулярные платежи
+        # Рекуррентные платежи
         is_regular = payload.get('regularCreated') == True
         if is_regular:
-            subscription.regular_status = 'Active'
-            subscription.regular_mode = payload.get('regularMode', 'monthly')
+            subscription.recurrent_status = 'Active'
+            subscription.recurrent_mode = payload.get('regularMode', 'monthly')
             subscription.card_token = payload.get('recToken')
-            subscription.date_begin = timezone.now().date()
-            subscription.date_end = (timezone.now() + timedelta(days=365)).date()
-            subscription.next_payment_date = (timezone.now() + timedelta(days=duration_days)).date()
+            subscription.recurrent_date_begin = timezone.now().date()
+            subscription.recurrent_date_end = (timezone.now() + timedelta(days=365)).date()
+            subscription.recurrent_next_payment = (timezone.now() + timedelta(days=duration_days)).date()
         
         # Сброс напоминаний
-        subscription.reminder_sent = 0
+        subscription.reminder_sent_count = 0
         subscription.reminder_sent_at = None
-        subscription.last_payment_date = timezone.now().date()
+        subscription.last_payment_date = timezone.now()  # DateTime, не .date()
         subscription.save()
-
+        
     def _extend_subscription(self, subscription: Subscription, duration_days: int):
-        """Продление подписки как в PHP"""
+        """Продление подписки с улучшенным логированием и проверками"""
         import logging
         from django.utils import timezone
         from datetime import timedelta
@@ -304,17 +358,35 @@ class WayForPayService:
         logger = logging.getLogger(__name__)
         
         current_expiration = subscription.expires_at
-        starts_from = max(current_expiration, timezone.now().date()) if current_expiration > timezone.now().date() else timezone.now().date()
+        now = timezone.now()
         
-        subscription.expires_at = starts_from + timedelta(days=duration_days)
-        subscription.status = 'active'
+        # Определяем якорь для продления
+        anchor = max(current_expiration, now) if current_expiration else now
+        new_expiration = anchor + timedelta(days=duration_days)
+        
+        # ДОБАВЛЕНО: детальное логирование для отладки
+        logger.info(f"Extending subscription {subscription.id}:")
+        logger.info(f"  - Current expires_at: {current_expiration}")
+        logger.info(f"  - Anchor (max with now): {anchor}")
+        logger.info(f"  - Duration days: {duration_days}")
+        logger.info(f"  - New expires_at: {new_expiration}")
+        
+        # Обновляем подписку
+        subscription.expires_at = new_expiration.date()
+        subscription.last_payment_date = now.date()
+        subscription.status = 'active'  # Активируем если была неактивной
+        
+        # Сброс напоминаний при продлении
         subscription.reminder_sent = 0
         subscription.reminder_sent_at = None
-        subscription.last_payment_date = timezone.now().date()
-        subscription.save()
         
-        logger.info(f"Subscription for user {subscription.user_id} extended to {subscription.expires_at}")
-            
+        subscription.save(update_fields=[
+            'expires_at', 'last_payment_date', 'status', 
+            'reminder_sent', 'reminder_sent_at', 'updated_at'
+        ])
+        
+        logger.info(f"Subscription {subscription.id} extended successfully")
+   
     def _update_or_create_invoice(self, base_reference: str, payload: Dict, bot_id: int, user_id: int, plan_id: int, amount: float, status: str):
         """Создание/обновление инвойса как в PHP"""
         import logging
@@ -366,20 +438,21 @@ class WayForPayService:
 
     
     def _handle_payment_notification(self, bot_id: int, user_id: int, plan_id: int, base_reference: str, subscription):
-        """Отправка уведомления с debounce логикой как в PHP"""
+        """Отправка уведомления с исправленной debounce логикой"""
         import logging
         from django.utils import timezone
         from datetime import timedelta
         
         logger = logging.getLogger(__name__)
         
-        # Debounce: проверяем недавние успешные платежи
+        # ИСПРАВЛЕНО: используем paid_at вместо created_at
         debounce_minutes = 10
         recent_success = Invoice.objects.filter(
             bot_id=bot_id,
             user_id=user_id,
             payment_status=PaymentStatus.APPROVED,
-            created_at__gte=timezone.now() - timedelta(minutes=debounce_minutes)
+            paid_at__gte=timezone.now() - timedelta(minutes=debounce_minutes),  # ИЗМЕНЕНО
+            paid_at__isnull=False  # ДОБАВЛЕНО: убеждаемся, что paid_at заполнен
         ).exclude(order_reference=base_reference).exists()
         
         if recent_success:

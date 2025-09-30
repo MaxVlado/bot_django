@@ -54,12 +54,43 @@ class Subscription(models.Model):
     expires_at = models.DateTimeField()
     last_payment_date = models.DateTimeField(null=True, blank=True)
 
-    # Для рекуррентных платежей
-    card_token = models.CharField(max_length=255, null=True, blank=True)
-    card_masked = models.CharField(max_length=20, null=True, blank=True)
+    # Группа 1: Платёжные данные
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, 
+                                help_text="Сумма платежа")
+    order_reference = models.CharField(max_length=255, null=True, blank=True,
+                                    help_text="Ссылка на заказ")
+    transaction_id = models.CharField(max_length=255, null=True, blank=True,
+                                    help_text="ID транзакции")
 
+    # Группа 2: Рекуррентные платежи
+    recurrent_status = models.CharField(max_length=20, null=True, blank=True,
+                                    help_text="Статус автоплатежей: Active/Paused/Canceled")
+    recurrent_mode = models.CharField(max_length=20, null=True, blank=True,
+                                    help_text="Режим: weekly/monthly")
+    recurrent_date_begin = models.DateField(null=True, blank=True,
+                                        help_text="Начало периода рекуррента")
+    recurrent_date_end = models.DateField(null=True, blank=True,
+                                        help_text="Конец периода рекуррента")
+    recurrent_next_payment = models.DateField(null=True, blank=True,
+                                            help_text="Дата следующего автоплатежа")
+    card_token = models.CharField(max_length=255, null=True, blank=True,
+                             help_text="Токен карты для автоплатежей")
+    card_masked = models.CharField(max_length=20, null=True, blank=True,
+                              help_text="Замаскированный номер карты")
+
+    # Группа 3: Напоминания
+    reminder_sent_count = models.IntegerField(default=0,
+                                            help_text="Количество отправленных напоминаний")
+    reminder_sent_at = models.DateTimeField(null=True, blank=True,
+                                        help_text="Когда было последнее напоминание")
+    reminder_failed_attempts = models.IntegerField(default=0,
+                                                help_text="Неудачные попытки оплаты")
+
+    # Временные метки
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
 
     class Meta:
         db_table = 'subscriptions'
@@ -67,6 +98,7 @@ class Subscription(models.Model):
         indexes = [
             models.Index(fields=["bot_id", "user", "status"]),
             models.Index(fields=["expires_at"]),
+            models.Index(fields=["recurrent_next_payment"]),
         ]
 
     def __str__(self):

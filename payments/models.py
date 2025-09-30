@@ -26,7 +26,7 @@ class Invoice(models.Model):
 
     # Сумма и валюта
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default='UAH')
+    currency = models.CharField(max_length=100, default='UAH')
 
     # Статус платежа
     payment_status = models.CharField(
@@ -72,11 +72,32 @@ class Invoice(models.Model):
 
     @classmethod
     def generate_order_reference(cls, bot_id: int, user_id: int, plan_id: int) -> str:
-        """Генерация уникального номера заказа: bot_user_plan_timestampMs_rand6"""
-        import time, secrets
-        ts_ms = int(time.time() * 1000)  # миллисекунды
-        rand6 = secrets.token_hex(3)  # 6 hex-символов
-        return f"{bot_id}_{user_id}_{plan_id}_{ts_ms}_{rand6}"
+        """
+        Генерация orderReference в формате: ORDER_timestamp+random3_user_plan
+        
+        Пример: ORDER_1758606042kjI_407673079_2
+        
+        Структура:
+        - PREFIX: ORDER_
+        - timestamp (секунды): 1758606042
+        - random 3 символа: kjI
+        - user_id (telegram): 407673079
+        - plan_id: 2
+        """
+        import time
+        import random
+        import string
+        
+        # Timestamp в секундах (как в PHP)
+        timestamp = int(time.time())
+        
+        # 3 случайных символа (буквы и цифры, как Str::random(3) в PHP)
+        random_chars = ''.join(random.choices(string.ascii_letters + string.digits, k=3))
+        
+        # Формат: ORDER_timestamp+random_user_plan
+        order_reference = f"ORDER_{timestamp}{random_chars}_{user_id}_{plan_id}"
+        
+        return order_reference
 
     def is_approved(self) -> bool:
         return self.payment_status == PaymentStatus.APPROVED

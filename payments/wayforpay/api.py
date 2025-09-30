@@ -107,22 +107,60 @@ class WayForPayAPI:
     def get_ack_signature(self, order_reference: str, status: str, t: int) -> str:
         return self._hmac_md5(self._join([order_reference, status, t]))
 
-    def parse_order_reference(self, order_reference: str) -> Tuple[int, int, int, int]:
+    
+    def parse_order_reference(self, order_reference: str) -> Tuple[int, int, int]:
         """
-        Поддержка обоих форматов:
-        - WFP-<bot>-<user>-<plan>-<ts>
-        - <bot>_<user>_<plan>_<ts>
+        Парсинг orderReference формата: ORDER_1758606042kjI_407673079_2
+        
+        Возвращает: (user_id, plan_id, timestamp)
+        
+        Примечание: bot_id извлекается из Plan, не из orderReference
         """
-        s = order_reference
-        if s.startswith("WFP-"):
-            s = s[4:]
-            parts = s.split("-")
-        else:
-            parts = s.split("_")
-        if len(parts) < 4:
-            raise ValueError(f"Invalid order_reference: {order_reference}")
-        return int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
-
+        import re
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Очистка: убираем точку с запятой и пробелы
+        ref = order_reference.strip().rstrip(';')
+        
+        logger.info(f"Parsing orderReference: {ref}")
+        
+        # Проверяем префикс ORDER_
+        if not ref.startswith("ORDER_"):
+            raise ValueError(f"Invalid orderReference format (must start with ORDER_): {order_reference}")
+        
+        # Убираем префикс ORDER_
+        ref_without_prefix = ref[6:]  # "1758606042kjI_407673079_2"
+        
+        # Разделяем по подчёркиванию
+        parts = ref_without_prefix.split('_')
+        
+        # Ожидаем 3 части: [timestamp+random, user_id, plan_id]
+        if len(parts) != 3:
+            raise ValueError(f"Invalid orderReference format (expected 3 parts): {order_reference}")
+        
+        try:
+            # parts[0] = "1758606042kjI" - timestamp + 3 случайных символа
+            # parts[1] = "407673079" - user_id
+            # parts[2] = "2" - plan_id
+            
+            user_id = int(parts[1])
+            plan_id = int(parts[2])
+            
+            # Извлекаем timestamp из первой части (берём только цифры в начале)
+            timestamp_match = re.match(r'^(\d+)', parts[0])
+            if not timestamp_match:
+                raise ValueError(f"Cannot extract timestamp from: {parts[0]}")
+            
+            timestamp = int(timestamp_match.group(1))
+            
+            logger.info(f"✅ Parsed: user_id={user_id}, plan_id={plan_id}, timestamp={timestamp}")
+            
+            return user_id, plan_id, timestamp
+            
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Cannot parse orderReference {order_reference}: {e}")
+    
     def generate_payment_form_data(self, invoice_data: Dict) -> Dict:
         """Генерация данных для формы/редиректа на страницу оплаты."""
         import time
