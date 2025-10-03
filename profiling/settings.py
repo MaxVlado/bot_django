@@ -47,7 +47,7 @@ INSTALLED_APPS = [
     # Local apps
     'core',
     'subscriptions',
-    'payments',"botops",
+    'payments',"botops",'leads',
     # Интеграцию WayForPay делаем внутри payments (без отдельного приложения)
 ]
 
@@ -179,3 +179,13 @@ WAYFORPAY_SERVICE_URL = bot_settings.wayforpay_service_url
 WAYFORPAY_API_URL = bot_settings.wayforpay_api_url
 WAYFORPAY_PAY_URL = bot_settings.wayforpay_pay_url
 WAYFORPAY_VERIFY_SIGNATURE = bot_settings.wayforpay_verify_signature
+
+# Email настройки (пример для Gmail SMTP)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 465  # 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'profilingclub@gmail.com')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'lqzl nalz tiyc oakh')
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
