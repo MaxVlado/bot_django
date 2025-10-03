@@ -443,3 +443,6 @@ def register_handlers(dp, bot_id: int):
         return await handler(event, data)
     
     dp.include_router(router)
+
+    #Логируем для отладки
+    logger.info(f"Lead handlers registered for bot_id={bot_id}")

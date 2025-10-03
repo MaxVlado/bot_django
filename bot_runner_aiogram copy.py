@@ -63,16 +63,10 @@ async def run_longpoll(bot_model: BotModel):
     pool = await make_pool()
     session = aiohttp.ClientSession()
 
-    # Регистрируем handlers в зависимости от bot_id
-    if bot_model.bot_id == 1:
-        # bot_1 - handlers подписок
-        register_subs(dp, pool=pool, session=session, bot_model=bot_model)
-    elif bot_model.bot_id == 2:
-        # bot_2 - handlers лидов
-        register_lead_handlers(dp, bot_id=bot_model.bot_id)
-    else:
-        # Для других ботов - по умолчанию subscriptions
-        register_subs(dp, pool=pool, session=session, bot_model=bot_model)
+    # регистрируем наши хендлеры меню/подписок
+    register_subs(dp, pool=pool, session=session, bot_model=bot_model)
+
+    register_lead_handlers(dp, bot_id=bot_model.bot_id)
 
     bot = AioBot(
         token=bot_model.token,
@@ -101,16 +95,11 @@ async def run_webhook(bot_model: BotModel):
     pool = await make_pool()
     session = aiohttp.ClientSession()
     
-    # Регистрируем handlers в зависимости от bot_id
-    if bot_model.bot_id == 1:
-        # bot_1 - handlers подписок
-        register_subs(dp, pool=pool, session=session, bot_model=bot_model)
-    elif bot_model.bot_id == 2:
-        # bot_2 - handlers лидов
-        register_lead_handlers(dp, bot_id=bot_model.bot_id)
-    else:
-        # Для других ботов - по умолчанию subscriptions
-        register_subs(dp, pool=pool, session=session, bot_model=bot_model)
+
+    # регистрируем наши хендлеры меню/подписок
+    register_subs(dp, pool=pool, session=session, bot_model=bot_model)
+
+    register_lead_handlers(dp, bot_id=bot_model.bot_id)
 
     bot = AioBot(
         token=bot_model.token,
