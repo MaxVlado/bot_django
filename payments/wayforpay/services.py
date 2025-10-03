@@ -220,20 +220,28 @@ class WayForPayService:
         
         # 7. Обработка платежа
         return self._process_payment_status(payload, user_id, plan_id, bot_id, base_reference)
+   
     def _update_invoice_fields(self, invoice: Invoice, payload: Dict):
-            """Обновление полей инвойса как в PHP коде"""
-            invoice.phone = invoice.phone or payload.get('phone')
-            invoice.email = invoice.email or payload.get('email') 
-            invoice.card_pan = invoice.card_pan or payload.get('cardPan')
-            invoice.card_type = invoice.card_type or payload.get('cardType')
-            invoice.card_product = getattr(invoice, 'card_product', None) or payload.get('cardProduct')
-            invoice.issuer_bank = invoice.issuer_bank or payload.get('issuerBankName')
-            invoice.issuer_country = invoice.issuer_country or payload.get('issuerBankCountry')
-            invoice.payment_system = invoice.payment_system or payload.get('paymentSystem')
-            invoice.fee = invoice.fee or payload.get('fee')
-            invoice.rrn = invoice.rrn or payload.get('rrn')
-            invoice.terminal = getattr(invoice, 'terminal', None) or payload.get('terminal')
-            invoice.save()
+        """Обновление полей инвойса без перезаписи существующих значений"""
+        
+        # Обновляем только если поле пустое
+        issuer_country = payload.get('issuerBankCountry')
+        if issuer_country:
+            issuer_country = issuer_country[:3].upper()
+        
+        invoice.phone = invoice.phone or payload.get('phone')
+        invoice.email = invoice.email or payload.get('email') 
+        invoice.card_pan = invoice.card_pan or payload.get('cardPan')
+        invoice.card_type = invoice.card_type or payload.get('cardType')
+        invoice.issuer_bank = invoice.issuer_bank or payload.get('issuerBankName')
+        invoice.issuer_country = invoice.issuer_country or issuer_country  # ИСПОЛЬЗУЕМ ОБРАБОТАННОЕ
+        invoice.payment_system = invoice.payment_system or payload.get('paymentSystem')
+        invoice.fee = invoice.fee or payload.get('fee')
+        invoice.rrn = invoice.rrn or payload.get('rrn')
+        invoice.approval_code = invoice.approval_code or payload.get('approvalCode')
+        invoice.terminal = invoice.terminal or payload.get('terminal')
+        invoice.reason_code = invoice.reason_code or payload.get('reasonCode')
+        invoice.save()
    
     def _process_payment_status(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str) -> Dict:
         """Обработка статуса платежа с нормализацией"""
@@ -348,7 +356,7 @@ class WayForPayService:
         subscription.reminder_sent_at = None
         subscription.last_payment_date = timezone.now()  # DateTime, не .date()
         subscription.save()
-        
+
     def _extend_subscription(self, subscription: Subscription, duration_days: int):
         """Продление подписки с улучшенным логированием и проверками"""
         import logging
@@ -392,6 +400,11 @@ class WayForPayService:
         import logging
         logger = logging.getLogger(__name__)
         
+        # ИСПРАВЛЕНО: обрезаем issuer_country до 3 символов (код страны)
+        issuer_country = payload.get('issuerBankCountry')
+        if issuer_country:
+            issuer_country = issuer_country[:3].upper()  # UA, US, UK и т.д.
+        
         Invoice.objects.update_or_create(
             order_reference=base_reference,
             defaults={
@@ -406,33 +419,42 @@ class WayForPayService:
                 'email': payload.get('email'),
                 'card_pan': payload.get('cardPan'),
                 'card_type': payload.get('cardType'),
-                'card_product': payload.get('cardProduct'),
                 'issuer_bank': payload.get('issuerBankName'),
-                'issuer_country': payload.get('issuerBankCountry'),
+                'issuer_country': issuer_country,  # <-- ВОТ ЭТО!
                 'payment_system': payload.get('paymentSystem'),
                 'fee': payload.get('fee'),
                 'rrn': payload.get('rrn'),
+                'approval_code': payload.get('approvalCode'),
                 'terminal': payload.get('terminal'),
+                'reason_code': payload.get('reasonCode'),
+                'paid_at': timezone.now() if status == 'APPROVED' else None,
             }
         )
 
     def _update_verified_user(self, bot_id: int, user_id: int, payload: Dict):
-        """Обновление верифицированного пользователя как в PHP"""
+        """Обновление верифицированного пользователя на основе реальных полей модели"""
         import logging
         from payments.models import VerifiedUser
+        from core.models import TelegramUser
+        from django.utils import timezone
         
         logger = logging.getLogger(__name__)
         
+        # Получаем user объект
+        user = TelegramUser.objects.get(user_id=user_id)
+        
+        # ИСПРАВЛЕНО: используем только поля которые есть в модели
         VerifiedUser.objects.update_or_create(
             bot_id=bot_id,
-            user_id=user_id,
+            user=user,  # ForeignKey, не user_id!
             defaults={
-                'verified': True,
+                'first_payment_date': timezone.now(),  # ДОБАВЛЕНО: обязательное поле
                 'card_masked': payload.get('cardPan'),
-                'card_type': payload.get('cardType'),
                 'payment_system': payload.get('paymentSystem'),
                 'issuer_bank': payload.get('issuerBankName'),
-                'fee': payload.get('fee'),
+                'last_payment_date': timezone.now(),
+                'total_amount_paid': 0,  # ДОБАВЛЕНО: обязательное поле, будет обновлено через update_payment_stats
+                'successful_payments_count': 1,  # По умолчанию 1
             }
         )
 

@@ -21,7 +21,7 @@ from bot.subscriptions import register as register_subs
 from bot.config import settings as bot_settings
 from core.models import Bot as BotModel
 from asgiref.sync import sync_to_async
-
+from leads.bot import register_handlers as register_lead_handlers
 
 # -------------------- logging --------------------
 logging.basicConfig(
@@ -66,6 +66,8 @@ async def run_longpoll(bot_model: BotModel):
     # регистрируем наши хендлеры меню/подписок
     register_subs(dp, pool=pool, session=session, bot_model=bot_model)
 
+    register_lead_handlers(dp, bot_id=bot_model.bot_id)
+
     bot = AioBot(
         token=bot_model.token,
         default=DefaultBotProperties(parse_mode="HTML"),
@@ -92,9 +94,12 @@ async def run_webhook(bot_model: BotModel):
 
     pool = await make_pool()
     session = aiohttp.ClientSession()
+    
 
     # регистрируем наши хендлеры меню/подписок
     register_subs(dp, pool=pool, session=session, bot_model=bot_model)
+
+    register_lead_handlers(dp, bot_id=bot_model.bot_id)
 
     bot = AioBot(
         token=bot_model.token,

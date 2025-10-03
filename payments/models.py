@@ -26,7 +26,7 @@ class Invoice(models.Model):
 
     # Сумма и валюта
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=100, default='UAH')
+    currency = models.CharField(max_length=3, default='UAH')
 
     # Статус платежа
     payment_status = models.CharField(
