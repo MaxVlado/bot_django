@@ -72,6 +72,7 @@ async def get_bot_config(bot_id: int) -> Optional[LeadBotConfig]:
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext, bot_id: int):
     """Обработка команды /start - начало сбора заявки"""
+    print(f"!!! CMD_START CALLED: user={message.from_user.id}, bot_id={bot_id}", flush=True)
     logger.info(f"User {message.from_user.id} started lead conversation")
     
     # Получаем или создаем пользователя
