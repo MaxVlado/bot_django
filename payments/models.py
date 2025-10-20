@@ -181,7 +181,7 @@ class MerchantConfig(models.Model):
     pay_url = models.URLField(default="https://secure.wayforpay.com/pay")
     api_url = models.URLField(default="https://api.wayforpay.com/api")
     django_api_base = models.URLField(
-        default="https://dev.astrocryptovoyager.com/api/payments/wayforpay",
+        default="https://dev.profilinggroup.com/api/payments/wayforpay",
         help_text="URL Django API для создания инвойсов (НЕ WayForPay API!)"
     )
     verify_signature = models.BooleanField(default=True)

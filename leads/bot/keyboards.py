@@ -38,7 +38,7 @@ def get_comment_question_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="✅ Так", callback_data="comment:yes"),
-                InlineKeyboardButton(text="❌ Ні, питання задам коли зв'яжетесь зі мною", callback_data="comment:no")
+                InlineKeyboardButton(text="❌ Ні", callback_data="comment:no")
             ]
         ]
     )
@@ -59,10 +59,10 @@ def get_confirmation_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_question_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура с кнопкой 'Є питання'"""
+    """Клавиатура с кнопкой 'Залишити нову заявку'"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Є питання", callback_data="new_question")]
+            [InlineKeyboardButton(text="💬 Залишити нову заявку", callback_data="new_question")]
         ]
     )
     return keyboard

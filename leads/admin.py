@@ -123,7 +123,6 @@ class LeadAdmin(admin.ModelAdmin):
     
     list_filter = (
         LeadStatusFilter,
-        NotificationSentFilter,
         'bot',
         'created_at'
     )
@@ -142,24 +141,15 @@ class LeadAdmin(admin.ModelAdmin):
         'user',
         'created_at',
         'updated_at',
-        'email_sent',
         'telegram_sent'
     )
     
     fieldsets = (
         ('Информация о заявке', {
-            'fields': ('bot', 'user', 'status')
+            'fields': ('bot', 'user', 'status', 'created_at', 'updated_at')
         }),
         ('Данные клиента', {
             'fields': ('full_name', 'phone', 'email', 'comment')
-        }),
-        ('Статус уведомлений', {
-            'fields': ('email_sent', 'telegram_sent'),
-            'classes': ('collapse',)
-        }),
-        ('Метки времени', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
         }),
     )
     
@@ -183,11 +173,10 @@ class LeadAdmin(admin.ModelAdmin):
     status_badge.short_description = 'Статус'
     
     def notification_status(self, obj):
-        """Статус отправки уведомлений"""
-        email_icon = '📧' if obj.email_sent else '❌'
+        """Статус отправки уведомлений в Telegram"""
         telegram_icon = '✅' if obj.telegram_sent else '❌'
-        return format_html('{} {}', email_icon, telegram_icon)
-    notification_status.short_description = 'Уведомления (📧/TG)'
+        return format_html('{}', telegram_icon)
+    notification_status.short_description = 'Уведомления (TG)'
     
     def has_module_permission(self, request):
         """Показывать раздел только пользователям с правами"""

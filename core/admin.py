@@ -153,7 +153,7 @@ class BotAdmin(admin.ModelAdmin):
     def restart_django(self, request):
         try:
             subprocess.run(
-                ["sudo", "-n", "systemctl", "restart", "dev-astrovoyager"],
+                ["sudo", "-n", "systemctl", "restart", "dev-profiling"],
                 capture_output=True, text=True
             )
             return HttpResponse(

@@ -24,6 +24,7 @@ from .utils import (
 )
 from leads.models import Lead, LeadBotConfig
 from core.models import TelegramUser, Bot as BotModel
+from aiogram.types import ReplyKeyboardRemove
 
 logger = logging.getLogger("leads.bot")
 
@@ -88,20 +89,35 @@ async def cmd_start(message: Message, state: FSMContext, bot_id: int):
         await message.answer("⛔ Доступ запрещён. Обратитесь в поддержку.")
         return
     
-    # Получаем конфигурацию бота
-    config = await get_bot_config(bot_id)
-    welcome_text = config.welcome_text if config else "Привет! Я помогу вам оставить заявку.\n\nВведите ваше имя:"
+    # Автоматически берем имя и username из Telegram
+    full_name = message.from_user.first_name or "Користувач"
+    username = f"@{message.from_user.username}" if message.from_user.username else None
     
     # Очищаем предыдущее состояние
     await state.clear()
     
-    # Сохраняем bot_id в state
-    await state.update_data(bot_id=bot_id)
+    # Сохраняем данные в state
+    await state.update_data(
+        bot_id=bot_id,
+        full_name=full_name,
+        username=username
+    )
     
-    # Запрашиваем имя
-    await message.answer(welcome_text)
-    await state.set_state(LeadForm.waiting_for_name)
-
+    # Получаем конфигурацию бота
+    config = await get_bot_config(bot_id)
+    
+    # Используем welcome_text из админки и персонализируем
+    welcome_text = config.welcome_text if config else "Привіт! 👋\n\nЯ допоможу залишити заявку."
+    welcome_text = welcome_text.replace("{name}", full_name).replace("Vlad", full_name)
+    
+    phone_text = config.phone_request_text if config else "Введіть номер телефону у форматі +380... або натисніть кнопку 'Поділитися номером'"
+    
+    # Отправляем welcome + phone в одном сообщении
+    await message.answer(
+        f"{welcome_text}\n\n{phone_text}",
+        reply_markup=get_phone_keyboard()
+    )
+    await state.set_state(LeadForm.waiting_for_phone)
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
@@ -167,7 +183,7 @@ async def process_contact(message: Message, state: FSMContext, bot_id: int):
     
     # Получаем конфигурацию для текста валидации
     config = await get_bot_config(bot_id)
-    validation_text = config.email_request_text if config else f"{full_name}, це правильний номер телефону для зв'язку з Вами?\n\nПеревірте, будь ласка"
+    validation_text = f"{full_name}, це правильний номер телефону для зв'язку з Вами?\n\nПеревірте, будь ласка"
     
     # Показываем номер с подтверждением
     validation_text = validation_text.replace("Vlad", full_name)
@@ -208,7 +224,7 @@ async def process_phone_text(message: Message, state: FSMContext, bot_id: int):
     
     # Получаем конфигурацию для текста валидации
     config = await get_bot_config(bot_id)
-    validation_text = config.email_request_text if config else f"{full_name}, це правильний номер телефону для зв'язку з Вами?\n\nПеревірте, будь ласка"
+    validation_text = f"{full_name}, це правильний номер телефону для зв'язку з Вами?\n\nПеревірте, будь ласка"
     
     # Показываем номер с подтверждением
     validation_text = validation_text.replace("Vlad", full_name)
@@ -228,9 +244,45 @@ async def phone_confirmed(callback: CallbackQuery, state: FSMContext, bot_id: in
     data = await state.get_data()
     full_name = data.get('full_name', 'Користувач')
     
+     # Получаем конфигурацию для текста запроса email
+    config = await get_bot_config(bot_id)
+    email_text = config.email_request_text if config else f"{full_name}, введіть ваш email або натисніть 'Пропустити', якщо не хочете його вказувати"
+    
+    email_text = email_text.replace("Vlad", full_name)
+    
+    await callback.message.edit_text(
+        email_text,
+        reply_markup=get_comment_question_keyboard()  # Используем ту же клавиатуру Так/Ні
+    )
+    await state.set_state(LeadForm.waiting_for_email)
+
+@router.callback_query(LeadForm.waiting_for_email, F.data == "comment:yes")
+async def email_yes(callback: CallbackQuery, state: FSMContext):
+    """Пользователь хочет указать email"""
+    await callback.answer()
+    
+    await callback.message.edit_text(
+        "Введіть ваш email:",
+        reply_markup=None
+    )
+    # Остаемся в том же состоянии для ввода
+
+
+@router.callback_query(LeadForm.waiting_for_email, F.data == "comment:no")
+async def email_no(callback: CallbackQuery, state: FSMContext, bot_id: int):
+    """Пользователь не хочет указывать email - переходим к комментарию"""
+    await callback.answer()
+    
+    # Пропускаем email
+    await state.update_data(email=None)
+    
+    # Получаем данные
+    data = await state.get_data()
+    full_name = data.get('full_name', 'Користувач')
+    
     # Получаем конфигурацию для текста запроса комментария
     config = await get_bot_config(bot_id)
-    comment_text = config.comment_request_text if config else f"{full_name}, останній крок 😊\n\nБажаєте залишити побажання, коментар чи запитання, будь ласка"
+    comment_text = config.comment_request_text if config else f"{full_name}, останній крок 😊\n\nБажаєте залишити побажання, коментар чи запитання?"
     
     comment_text = comment_text.replace("Vlad", full_name)
     
@@ -240,6 +292,44 @@ async def phone_confirmed(callback: CallbackQuery, state: FSMContext, bot_id: in
     )
     await state.set_state(LeadForm.asking_for_comment)
 
+
+@router.message(LeadForm.waiting_for_email)
+async def process_email(message: Message, state: FSMContext, bot_id: int):
+    """Обработка ввода email текстом"""
+    if not message.text:
+        await message.answer("Будь ласка, введіть email")
+        return
+    
+    email = message.text.strip()
+    
+    # Валидация email
+    is_valid, validated_email = validate_email(email)
+    
+    if not is_valid:
+        await message.answer(
+            "❌ Невірний формат email\n\n"
+            "Приклад: user@example.com\n\n"
+            "Спробуйте ще раз:"
+        )
+        return
+    
+    await state.update_data(email=validated_email)
+    
+    # Получаем данные
+    data = await state.get_data()
+    full_name = data.get('full_name', 'Користувач')
+    
+    # Получаем конфигурацию для текста запроса комментария
+    config = await get_bot_config(bot_id)
+    comment_text = config.comment_request_text if config else f"{full_name}, останній крок 😊\n\nБажаєте залишити побажання, коментар чи запитання?"
+    
+    comment_text = comment_text.replace("Vlad", full_name)
+    
+    await message.answer(
+        comment_text,
+        reply_markup=get_comment_question_keyboard()
+    )
+    await state.set_state(LeadForm.asking_for_comment)
 
 @router.callback_query(LeadForm.validating_phone, F.data == "phone:edit")
 async def phone_edit(callback: CallbackQuery, state: FSMContext):
@@ -271,7 +361,7 @@ async def comment_no(callback: CallbackQuery, state: FSMContext, bot_id: int):
     await callback.answer()
     
     # Сохраняем пустой комментарий
-    await state.update_data(comment=None, email=None)
+    await state.update_data(comment=None)
     
     # Показываем сводку данных
     data = await state.get_data()
@@ -298,7 +388,7 @@ async def process_comment(message: Message, state: FSMContext, bot_id: int):
         return
     
     comment = message.text.strip()
-    await state.update_data(comment=comment, email=None)
+    await state.update_data(comment=comment)
     
     logger.info(f"User {message.from_user.id} provided comment")
     
@@ -355,26 +445,32 @@ async def confirm_and_save(callback: CallbackQuery, state: FSMContext, bot: Bot,
         config = await get_bot_config(bot_id)
         
         # Email уведомление
-        if config and config.notification_email:
-            email_sent = await send_email_notification(
-                lead_id=lead.id,
-                full_name=full_name,
-                phone=phone,
-                email=email,
-                comment=comment,
-                recipient_email=config.notification_email
-            )
-            if email_sent:
-                lead.email_sent = True
-                await sync_to_async(lead.save)(update_fields=['email_sent'])
+        # if config and config.notification_email:
+        #     email_sent = await send_email_notification(
+        #         lead_id=lead.id,
+        #         full_name=full_name,
+        #         phone=phone,
+        #         email=email,
+        #         comment=comment,
+        #         recipient_email=config.notification_email
+        #     )
+        #     if email_sent:
+        #         lead.email_sent = True
+        #         await sync_to_async(lead.save)(update_fields=['email_sent'])
         
         # Telegram уведомление администратору
         if config and config.admin_user_id:
+            # Получаем название бота
+            bot_model = await sync_to_async(BotModel.objects.get)(bot_id=bot_id)
+            bot_title = bot_model.title
+            
             telegram_sent = await send_telegram_notification(
                 bot=bot,
                 admin_user_id=config.admin_user_id,
+                bot_title=bot_title,
                 lead_id=lead.id,
                 full_name=full_name,
+                username=data.get('username'),
                 phone=phone,
                 email=email,
                 comment=comment
@@ -401,7 +497,7 @@ async def confirm_and_save(callback: CallbackQuery, state: FSMContext, bot: Bot,
         logger.error(f"Error saving lead for user {callback.from_user.id}: {e}")
         await callback.message.edit_text(
             "❌ Виникла помилка при збереженні заявки. Будь ласка, спробуйте ще раз або зв'яжіться з підтримкою.",
-            reply_markup=None
+            reply_markup=get_question_keyboard()
         )
         await state.clear()
 
@@ -425,7 +521,7 @@ async def new_question(callback: CallbackQuery, state: FSMContext, bot_id: int):
     
     # Получаем конфигурацию
     config = await get_bot_config(bot_id)
-    welcome_text = config.welcome_text if config else "Привет! Я помогу вам оставить заявку.\n\nВведите ваше имя:"
+    welcome_text = config.welcome_text if config else "Привіт! Я допоможу вам залишити заявку.\n\nВведіть ваше ім'я:"
     
     await callback.message.edit_text(
         welcome_text,

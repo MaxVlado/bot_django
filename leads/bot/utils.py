@@ -38,15 +38,18 @@ def validate_phone(phone: str) -> tuple[bool, Optional[str]]:
     return False, None
 
 
-def validate_email(email: str) -> bool:
+def validate_email(email: str) -> tuple[bool, str]:
     """
     Простая валидация email.
     
     Returns:
-        True если email валиден
+        (True, normalized_email) если email валиден
+        (False, original_email) если невалиден
     """
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return bool(re.match(pattern, email))
+    email = email.strip().lower()
+    is_valid = bool(re.match(pattern, email))
+    return (is_valid, email if is_valid else email)
 
 
 async def send_email_notification(
@@ -98,8 +101,10 @@ Email: {email or 'Не указан'}
 async def send_telegram_notification(
     bot: Bot,
     admin_user_id: int,
+    bot_title: str,
     lead_id: int,
     full_name: str,
+    username: Optional[str],
     phone: str,
     email: Optional[str],
     comment: Optional[str]
@@ -111,16 +116,17 @@ async def send_telegram_notification(
         True если отправлено успешно
     """
     try:
+        # Формируем username строку
+        username_text = username if username else 'Не вказано'
+        
         message = f"""
-🔔 <b>Нова заявка #{lead_id}</b>
+🤖 <b>Від бота:</b> {bot_title}
 
 👤 <b>Ім'я:</b> {full_name}
+📱 <b>Username:</b> {username_text}
 📞 <b>Телефон:</b> <code>{phone}</code>
 📧 <b>Email:</b> {email or 'Не вказано'}
 💬 <b>Коментар:</b> {comment or 'Немає'}
-
----
-<i>Автоматичне повідомлення від Lead Bot</i>
         """.strip()
         
         await bot.send_message(
@@ -132,11 +138,8 @@ async def send_telegram_notification(
         logger.info(f"Telegram notification sent for lead #{lead_id} to admin {admin_user_id}")
         return True
         
-    except TelegramAPIError as e:
-        logger.error(f"Failed to send Telegram notification for lead #{lead_id}: {e}")
-        return False
     except Exception as e:
-        logger.error(f"Unexpected error sending Telegram notification for lead #{lead_id}: {e}")
+        logger.error(f"Failed to send Telegram notification for lead #{lead_id}: {e}")
         return False
 
 

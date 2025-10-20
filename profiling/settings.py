@@ -23,9 +23,9 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 ALLOWED_HOSTS = [
-    "dev.astrocryptovoyager.com",
-    "www.dev.astrocryptovoyager.com",
-    "205.196.80.158",
+    "dev.profilinggroup.com",
+    "www.dev.profilinggroup.com",
+    "159.253.19.31",
     "localhost"
 ]
 
@@ -113,8 +113,8 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 
 if os.getenv("DJANGO_ENV") == "production":
-    STATIC_ROOT = '/var/www/astrocryptov_usr/data/www/dev.astrocryptovoyager.com/staticfiles'
-    MEDIA_ROOT = '/var/www/astrocryptov_usr/data/www/dev.astrocryptovoyager.com/media'
+    STATIC_ROOT = '/var/www/profiling/data/www/dev.profilinggroup.com/staticfiles'
+    MEDIA_ROOT = '/var/www/profiling/data/www/dev.profilinggroup.com/media'
 else:
     STATIC_ROOT = BASE_DIR / "staticfiles"
     MEDIA_ROOT = BASE_DIR / "media"
