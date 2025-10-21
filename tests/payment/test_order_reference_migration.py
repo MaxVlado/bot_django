@@ -16,22 +16,28 @@ WayForPayAPI = getattr(mod, "WayForPayAPI")
 
 
 @covers("S18.1")
-def test_parse_order_reference_old_format():
+def test_parse_order_reference_invalid_format_without_prefix():
     """
-    Старый формат: bot_user_plan_ts — должен корректно распарситься.
+    Неверный формат без префикса ORDER_ должен вызывать ошибку.
+    Формат: 5_6708861351_1_1700000000 (без ORDER_)
     """
     api = WayForPayAPI()
     ref = "5_6708861351_1_1700000000"
-    bot_id, user_id, plan_id, ts = api.parse_order_reference(ref)
-    assert (bot_id, user_id, plan_id, ts) == (5, 6708861351, 1, 1700000000)
+    
+    with pytest.raises(ValueError, match="must start with ORDER_"):
+        api.parse_order_reference(ref)
 
 
 @covers("S18.1")
-def test_parse_order_reference_new_format_with_suffix():
+def test_parse_order_reference_valid_new_format():
     """
-    Новый формат: bot_user_plan_tsMs_rand6 — должны игнорировать хвост и парсить первые 4 части.
+    Правильный новый формат: ORDER_timestamp+rand_user_plan должен парситься корректно.
     """
     api = WayForPayAPI()
-    ref = "5_6708861351_1_1700000000123_abcdef"
-    bot_id, user_id, plan_id, ts = api.parse_order_reference(ref)
-    assert (bot_id, user_id, plan_id, ts) == (5, 6708861351, 1, 1700000000123)
+    ref = "ORDER_1700000000abc_6708861351_1"
+    
+    user_id, plan_id, timestamp = api.parse_order_reference(ref)
+    
+    assert user_id == 6708861351
+    assert plan_id == 1
+    assert timestamp == 1700000000

@@ -333,6 +333,37 @@ class WayForPayService:
         
         return {"status": "accept"}
     
+    def _handle_declined_payment(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str) -> Dict:
+        """Обработка отклоненного платежа"""
+        import logging
+        from core.models import TelegramUser
+        from subscriptions.models import Plan
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f"Processing DECLINED payment for user {user_id}")
+        
+        # Получаем объекты
+        user = TelegramUser.objects.get(user_id=user_id)
+        plan = Plan.objects.get(id=plan_id)
+        
+        transaction_status = payload.get('transactionStatus', '').upper()
+        amount = float(payload.get('amount', 0))
+        
+        # Обновляем invoice статусом DECLINED/EXPIRED/CANCELED
+        self._update_or_create_invoice(
+            base_reference, 
+            payload, 
+            bot_id, 
+            user_id, 
+            plan_id, 
+            amount, 
+            transaction_status
+        )
+        
+        logger.info(f"Invoice marked as {transaction_status}")
+        
+        return {"status": "accept"}
+    
     def _setup_new_subscription(self, subscription: Subscription, payload: Dict, duration_days: int):
         """Настройка новой подписки"""
         import logging
@@ -380,17 +411,17 @@ class WayForPayService:
         logger.info(f"  - New expires_at: {new_expiration}")
         
         # Обновляем подписку
-        subscription.expires_at = new_expiration.date()
+        subscription.expires_at = new_expiration
         subscription.last_payment_date = now.date()
         subscription.status = 'active'  # Активируем если была неактивной
         
         # Сброс напоминаний при продлении
-        subscription.reminder_sent = 0
+        subscription.reminder_sent_count = 0 
         subscription.reminder_sent_at = None
         
         subscription.save(update_fields=[
             'expires_at', 'last_payment_date', 'status', 
-            'reminder_sent', 'reminder_sent_at', 'updated_at'
+            'reminder_sent_count', 'reminder_sent_at', 'updated_at'
         ])
         
         logger.info(f"Subscription {subscription.id} extended successfully")
