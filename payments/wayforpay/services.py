@@ -216,7 +216,7 @@ class WayForPayService:
         if existing_invoice:
             logger.info(f"🔄 Duplicate webhook for: {order_reference}")
             self._update_invoice_fields(existing_invoice, payload)
-            return {"status": "accepted"}
+            return {"status": "accept"}
         
         # 7. Обработка платежа
         return self._process_payment_status(payload, user_id, plan_id, bot_id, base_reference)
@@ -294,7 +294,7 @@ class WayForPayService:
         # Работа с подпиской
         subscription, created = Subscription.objects.get_or_create(
             bot_id=bot_id,
-            user_id=user_id,
+            user=user,
             defaults={
                 'user': user,
                 'plan': plan,
@@ -331,7 +331,7 @@ class WayForPayService:
         # Проверяем debounce и отправляем уведомление
         self._handle_payment_notification(bot_id, user_id, plan_id, base_reference, subscription)
         
-        return {"status": "accepted"}
+        return {"status": "accept"}
     
     def _setup_new_subscription(self, subscription: Subscription, payload: Dict, duration_days: int):
         """Настройка новой подписки"""
@@ -399,6 +399,9 @@ class WayForPayService:
         """Создание/обновление инвойса как в PHP"""
         import logging
         logger = logging.getLogger(__name__)
+
+        user = TelegramUser.objects.get(user_id=user_id)
+        plan = Plan.objects.get(id=plan_id)
         
         # ИСПРАВЛЕНО: обрезаем issuer_country до 3 символов (код страны)
         issuer_country = payload.get('issuerBankCountry')
@@ -409,8 +412,8 @@ class WayForPayService:
             order_reference=base_reference,
             defaults={
                 'bot_id': bot_id,
-                'user_id': user_id,
-                'plan_id': plan_id,
+                'user': user,      # ✅ ОБЪЕКТ
+                'plan': plan,      # ✅ ОБЪЕКТ
                 'amount': amount,
                 'payment_status': status,
                 'transaction_id': payload.get('rrn'),
