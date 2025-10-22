@@ -151,7 +151,7 @@ class WayForPayService:
         
         if verify_signature and not self.api.validate_response_signature(payload):
             logger.error('Invalid signature from WayForPay')
-            return {"status": "error", "message": "Invalid signature"}
+            return {"status": "accept", "message": "Invalid signature"}
         
         # 2. Проверка валюты
         if payload.get('currency') != 'UAH':
@@ -163,7 +163,7 @@ class WayForPayService:
         
         if not order_reference:
             logger.error("orderReference is missing")
-            return {"status": "error", "message": "orderReference required"}
+            return {"status": "accept", "message": "orderReference required"}
         
         # 4. Парсинг orderReference
         try:
@@ -182,9 +182,9 @@ class WayForPayService:
             
             if not invoice:
                 logger.error(f"❌ Invoice not found: {order_reference}")
-                return {"status": "error", "message": "Invoice not found"}
+                return {"status": "accept", "message": "Invoice not found"}
             
-            user_id = invoice.user_id
+            user_id = invoice.user.user_id
             plan_id = invoice.plan_id
             bot_id = invoice.bot_id
             
@@ -200,25 +200,35 @@ class WayForPayService:
         
         if not plan:
             logger.error(f"Plan {plan_id} not found or disabled")
-            return {"status": "error", "message": "Plan not available"}
+            return {"status": "accept", "message": "Plan not available"}
         
         bot_id = plan.bot_id
         logger.info(f"Bot ID from plan: {bot_id}")
         
+        # Замените строки примерно с 207 по 222 в payments/wayforpay/services.py
+
         # 6. Проверка дубликатов
         base_reference = order_reference.split('_WFPREG-')[0]
-        
-        existing_invoice = Invoice.objects.filter(
-            order_reference=base_reference,
-            payment_status=PaymentStatus.APPROVED
-        ).first()
-        
-        if existing_invoice:
-            logger.info(f"🔄 Duplicate webhook for: {order_reference}")
-            self._update_invoice_fields(existing_invoice, payload)
-            return {"status": "accept"}
-        
-        # 7. Обработка платежа
+
+        # ⭐ ИСПРАВЛЕНИЕ: различаем дубликат и рекуррентный платеж
+        is_recurring = '_WFPREG' in order_reference
+
+        if not is_recurring:
+            # Это обычный платеж - проверяем дубликат
+            existing_invoice = Invoice.objects.filter(
+                order_reference=base_reference,
+                payment_status=PaymentStatus.APPROVED
+            ).first()
+            
+            if existing_invoice:
+                logger.info(f"🔄 Duplicate webhook for: {order_reference}")
+                #self._update_invoice_fields(existing_invoice, payload)
+                return {"status": "accept"}
+        else:
+            # Это рекуррентный платеж - обрабатываем как новый
+            logger.info(f"💳 Recurring payment detected: {order_reference}")
+
+        # 7. Обработка платежа (для новых и рекуррентных)
         return self._process_payment_status(payload, user_id, plan_id, bot_id, base_reference)
    
     def _update_invoice_fields(self, invoice: Invoice, payload: Dict):
@@ -259,15 +269,15 @@ class WayForPayService:
         plan = Plan.objects.filter(id=plan_id, enabled=True).first()
         if not plan:
             logger.warning(f"Plan {plan_id} is no longer available")
-            return {"status": "error", "message": "Plan not available"}
+            return {"status": "accept", "message": "Plan not available"}
         
         if transaction_status == 'APPROVED':
             return self._handle_approved_payment(payload, user_id, plan_id, bot_id, base_reference)
-        elif transaction_status in ['DECLINED', 'EXPIRED', 'CANCELED']:
+        elif transaction_status in ['DECLINED', 'EXPIRED', 'CANCELED', 'REFUNDED']:
             return self._handle_declined_payment(payload, user_id, plan_id, bot_id, base_reference)
         else:
             logger.warning(f"Unknown transaction status: {transaction_status}")
-            return {"status": "error", "message": f"Unknown status: {transaction_status}"} 
+            return {"status": "accept", "message": f"Unknown status: {transaction_status}"} 
         
     def _handle_approved_payment(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str) -> Dict:
         """Обработка успешного платежа"""
@@ -320,13 +330,22 @@ class WayForPayService:
             subscription.amount = amount
             subscription.order_reference = base_reference
             subscription.transaction_id = transaction_id
+            
+            # ⭐ ДОБАВИТЬ: обновляем токен и маску если есть
+            if payload.get('recToken'):
+                subscription.card_token = payload.get('recToken')
+            if payload.get('cardPan'):
+                subscription.card_masked = payload.get('cardPan')
+            
             subscription.save()
     
         # Создаем/обновляем инвойс
         self._update_or_create_invoice(base_reference, payload, bot_id, user_id, plan_id, amount, 'APPROVED')
         
         # Создаем/обновляем VerifiedUser
-        self._update_verified_user(bot_id, user_id, payload)
+        # Сначала создаём/обновляем invoice, потом вызываем _update_verified_user
+        inv = Invoice.objects.get(order_reference=base_reference)
+        self._update_verified_user(bot_id, user_id, payload, inv)
         
         # Проверяем debounce и отправляем уведомление
         self._handle_payment_notification(bot_id, user_id, plan_id, base_reference, subscription)
@@ -372,12 +391,17 @@ class WayForPayService:
         
         logger = logging.getLogger(__name__)
         
+        # Сохраняем токен и маску карты если есть
+        if payload.get('recToken'):
+            subscription.card_token = payload.get('recToken')
+        if payload.get('cardPan'):
+            subscription.card_masked = payload.get('cardPan')
+        
         # Рекуррентные платежи
         is_regular = payload.get('regularCreated') == True
         if is_regular:
             subscription.recurrent_status = 'Active'
             subscription.recurrent_mode = payload.get('regularMode', 'monthly')
-            subscription.card_token = payload.get('recToken')
             subscription.recurrent_date_begin = timezone.now().date()
             subscription.recurrent_date_end = (timezone.now() + timedelta(days=365)).date()
             subscription.recurrent_next_payment = (timezone.now() + timedelta(days=duration_days)).date()
@@ -385,7 +409,8 @@ class WayForPayService:
         # Сброс напоминаний
         subscription.reminder_sent_count = 0
         subscription.reminder_sent_at = None
-        subscription.last_payment_date = timezone.now()  # DateTime, не .date()
+        subscription.last_payment_date = timezone.now()
+        
         subscription.save()
 
     def _extend_subscription(self, subscription: Subscription, duration_days: int):
@@ -412,7 +437,7 @@ class WayForPayService:
         
         # Обновляем подписку
         subscription.expires_at = new_expiration
-        subscription.last_payment_date = now.date()
+        subscription.last_payment_date = now
         subscription.status = 'active'  # Активируем если была неактивной
         
         # Сброс напоминаний при продлении
@@ -465,33 +490,31 @@ class WayForPayService:
             }
         )
 
-    def _update_verified_user(self, bot_id: int, user_id: int, payload: Dict):
-        """Обновление верифицированного пользователя на основе реальных полей модели"""
-        import logging
+    def _update_verified_user(self, bot_id: int, user_id: int, payload: Dict, invoice):
+        """Обновление верифицированного пользователя"""
         from payments.models import VerifiedUser
         from core.models import TelegramUser
         from django.utils import timezone
         
-        logger = logging.getLogger(__name__)
-        
-        # Получаем user объект
         user = TelegramUser.objects.get(user_id=user_id)
         
-        # ИСПРАВЛЕНО: используем только поля которые есть в модели
-        VerifiedUser.objects.update_or_create(
+        verified_user, created = VerifiedUser.objects.update_or_create(
             bot_id=bot_id,
-            user=user,  # ForeignKey, не user_id!
+            user=user,
             defaults={
-                'first_payment_date': timezone.now(),  # ДОБАВЛЕНО: обязательное поле
+                'first_payment_date': timezone.now(),
                 'card_masked': payload.get('cardPan'),
                 'payment_system': payload.get('paymentSystem'),
                 'issuer_bank': payload.get('issuerBankName'),
                 'last_payment_date': timezone.now(),
-                'total_amount_paid': 0,  # ДОБАВЛЕНО: обязательное поле, будет обновлено через update_payment_stats
-                'successful_payments_count': 1,  # По умолчанию 1
+                'total_amount_paid': invoice.amount, 
+                'successful_payments_count': 1,
             }
         )
-
+        
+    # Обновляем статистику для существующих пользователей
+        if not created:
+            verified_user.update_payment_stats(invoice)
     
     def _handle_payment_notification(self, bot_id: int, user_id: int, plan_id: int, base_reference: str, subscription):
         """Отправка уведомления с исправленной debounce логикой"""
@@ -520,3 +543,67 @@ class WayForPayService:
                 logger.info(f'Payment notification sent to user {user_id}')
             except Exception as e:
                 logger.error(f'Payment notification failed: {e}')
+
+
+    def process_manual_payment(self, invoice):
+        """
+        Обработка ручного погашения админом
+        
+        1. Создает/продлевает Subscription
+        2. Если is_recurrent_manual → бессрочная подписка (9999-12-31)
+        3. Обновляет VerifiedUser
+        4. Отправляет уведомление в бот
+        """
+        from django.utils import timezone
+        from datetime import timedelta, datetime
+        from subscriptions.models import Subscription, SubscriptionStatus
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        user = invoice.user
+        plan = invoice.plan
+        bot_id = invoice.bot_id
+        user_id = user.user_id
+        plan_id = plan.id
+        amount = float(invoice.amount)
+        duration_days = plan.duration_days
+        
+        logger.info(f"Manual payment: user={user_id}, plan={plan_id}, recurrent={invoice.is_recurrent_manual}")
+        
+        # Создаем/получаем подписку
+        subscription, created = Subscription.objects.get_or_create(
+            bot_id=bot_id,
+            user=user,
+            defaults={
+                'plan': plan,
+                'starts_at': timezone.now(),
+                'expires_at': timezone.now() + timedelta(days=duration_days),
+                'status': SubscriptionStatus.ACTIVE,
+                'amount': amount,
+                'order_reference': invoice.order_reference,
+            }
+        )
+        
+        # Бессрочная или обычная подписка
+        if invoice.is_recurrent_manual:
+            logger.info("Perpetual subscription (9999-12-31)")
+            subscription.expires_at = datetime(9999, 12, 31, tzinfo=timezone.utc)
+            subscription.recurrent_status = 'Active'
+            subscription.recurrent_mode = 'manual'
+            subscription.status = SubscriptionStatus.ACTIVE
+            subscription.last_payment_date = timezone.now()
+            subscription.save()
+        else:
+            if not created:
+                self._extend_subscription(subscription, duration_days)
+        
+        # Обновляем VerifiedUser
+        fake_payload = {
+            'cardPan': 'MANUAL_****',
+            'paymentSystem': 'MANUAL',
+            'issuerBankName': 'Manual Payment',
+        }
+        self._update_verified_user(bot_id, user_id, fake_payload)
+        
+        logger.info(f"Manual payment processed for user {user_id}")

@@ -112,6 +112,9 @@ class WayForPayAPI:
         """
         Парсинг orderReference формата: ORDER_1758606042kjI_407673079_2
         
+        Также поддерживает рекуррентный формат с суффиксом:
+        ORDER_1758606042kjI_407673079_2_WFPREG-1
+        
         Возвращает: (user_id, plan_id, timestamp)
         
         Примечание: bot_id извлекается из Plan, не из orderReference
@@ -124,6 +127,13 @@ class WayForPayAPI:
         ref = order_reference.strip().rstrip(';')
         
         logger.info(f"Parsing orderReference: {ref}")
+        
+        # ⭐ НОВОЕ: Обрезаем суффикс _WFPREG-* для рекуррентных платежей
+        if '_WFPREG-' in ref or '_WFPREG' in ref:
+            # Находим базовый reference без суффикса
+            base_ref = ref.split('_WFPREG')[0]
+            logger.info(f"Detected recurring payment, using base reference: {base_ref}")
+            ref = base_ref
         
         # Проверяем префикс ORDER_
         if not ref.startswith("ORDER_"):

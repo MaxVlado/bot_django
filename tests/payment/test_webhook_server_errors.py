@@ -127,7 +127,7 @@ def test_db_error_first_then_retry_processes_once(client, monkeypatch):
         "transactionId": "TX-ON-RETRY-DB",
     }
 
-    # Динамически импортируем сервис и патчим process_payment_response:
+    # Динамически импортируем сервис и патчим handle_webhook:
     # 1-й вызов → OperationalError, далее → оригинальный метод
     mod = None
     for p in ("wayforpay.services", "payments.wayforpay.services"):
@@ -138,7 +138,7 @@ def test_db_error_first_then_retry_processes_once(client, monkeypatch):
             continue
     assert mod is not None, "WayForPayService module not found"
     WayForPayService = getattr(mod, "WayForPayService")
-    original_proc = WayForPayService.process_payment_response
+    original_proc = WayForPayService.handle_webhook
     calls = {"n": 0}
 
     def flaky_proc(self, response_data, *args, **kwargs):
@@ -147,7 +147,7 @@ def test_db_error_first_then_retry_processes_once(client, monkeypatch):
             raise db_utils.OperationalError("Simulated DB down")
         return original_proc(self, response_data, *args, **kwargs)
 
-    monkeypatch.setattr(WayForPayService, "process_payment_response", flaky_proc)
+    monkeypatch.setattr(WayForPayService, "handle_webhook", flaky_proc)
 
     # 1) Первый вебхук: падаем OperationalError → это моделирует наш 5xx
     with pytest.raises(db_utils.OperationalError):

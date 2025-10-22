@@ -61,6 +61,11 @@ class Invoice(models.Model):
     # Временные метки
     notified_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    is_recurrent_manual = models.BooleanField(
+        default=False, 
+        verbose_name="Рекуррентная (бессрочная)",
+        help_text="Для ручной активации: подписка до 9999-12-31"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

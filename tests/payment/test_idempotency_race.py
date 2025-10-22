@@ -60,7 +60,7 @@ def test_concurrent_webhooks_for_same_reference_apply_only_once():
 
     def worker():
         try:
-            svc.process_payment_response(payload)
+            svc.handle_webhook(payload)
         except Exception as e:
             errs.append(e)
         finally:

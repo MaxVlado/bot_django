@@ -79,8 +79,8 @@ def test_recurring_first_payment_records_rec_token(client):
 @pytest.mark.django_db
 def test_recurring_followup_extends_subscription_and_updates_token(client):
     """
-    Есть активная подписка (создана первым успехом). Приходит следующий рекуррентный APPROVED
-    (orderReference с хвостом _WFPREG-...), с новым recToken.
+    Есть активная подписка (создана первым успехом). 
+    Приходит следующий рекуррентный APPROVED (orderReference с хвостом _WFPREG-...), с новым recToken.
     Ожидаем:
       - подписка продлена ещё на duration_days
       - subscription.card_token / card_masked обновлены с инвойса
@@ -121,18 +121,9 @@ def test_recurring_followup_extends_subscription_and_updates_token(client):
     assert sub.card_masked == "444455******1111"
 
     # 2) Рекуррентный APPROVED с новым токеном
-    import time as _t
-    ts = int(_t.time())
-    order_ref_2 = f"{plan.bot_id}_{user.user_id}_{plan.id}_{ts}_WFPREG-1"
-    Invoice.objects.create(
-        order_reference=order_ref_2,
-        user=user,
-        plan=plan,
-        bot_id=1,
-        amount=plan.price,
-        currency=plan.currency,
-        payment_status=PaymentStatus.PENDING,
-    )
+    # НЕ создаём новый Invoice! Используем тот же orderReference с суффиксом
+    order_ref_2 = f"{order_ref_1}_WFPREG-1"
+    
     payload2 = {
         "merchantAccount": "test_merch_n1",
         "orderReference": order_ref_2,
@@ -149,11 +140,11 @@ def test_recurring_followup_extends_subscription_and_updates_token(client):
     assert r2.json().get("status") == "accept"
 
     # Подписка продлена на ещё один период и токен/маска обновлены
-    from datetime import timedelta
     sub.refresh_from_db()
     assert (first_expire + timedelta(days=29, hours=23)) <= sub.expires_at <= (first_expire + timedelta(days=30, hours=1))
     assert sub.card_token == "tok_second"
     assert sub.card_masked == "555566******2222"
+
 
 @covers("S5.3")
 @pytest.mark.django_db
@@ -189,13 +180,9 @@ def test_recurring_declined_does_not_extend_and_keeps_token(client):
     assert r1.status_code == 200
 
     # 2) делаем один успешный рекуррентный платёж, чтобы в подписке появились token/mask
-    import time as _t
-    ts = int(_t.time())
-    order_ref_2 = f"{plan.bot_id}_{user.user_id}_{plan.id}_{ts}_WFPREG-a"
-    Invoice.objects.create(
-        order_reference=order_ref_2, user=user, plan=plan, bot_id=1,
-        amount=plan.price, currency=plan.currency, payment_status=PaymentStatus.PENDING,
-    )
+    # НЕ создаём новый Invoice! Используем orderReference с суффиксом
+    order_ref_2 = f"{order_ref_1}_WFPREG-a"
+    
     payload2 = {
         "merchantAccount": "test_merch_n1",
         "orderReference": order_ref_2,
@@ -219,12 +206,9 @@ def test_recurring_declined_does_not_extend_and_keeps_token(client):
     assert masked_before == "555566******2222"
 
     # 3) рекуррентная попытка DECLINED (автоплатёж «отключён/заблокирован»)
-    ts = int(_t.time())
-    order_ref_3 = f"{plan.bot_id}_{user.user_id}_{plan.id}_{ts}_WFPREG-b"
-    Invoice.objects.create(
-        order_reference=order_ref_3, user=user, plan=plan, bot_id=1,
-        amount=plan.price, currency=plan.currency, payment_status=PaymentStatus.PENDING,
-    )
+    # НЕ создаём новый Invoice! Используем orderReference с суффиксом
+    order_ref_3 = f"{order_ref_1}_WFPREG-b"
+    
     payload3 = {
         "merchantAccount": "test_merch_n1",
         "orderReference": order_ref_3,
@@ -246,6 +230,7 @@ def test_recurring_declined_does_not_extend_and_keeps_token(client):
     assert sub.expires_at == expires_before
     assert sub.card_token == token_before
     assert sub.card_masked == masked_before
+
 
 @covers("S5.4")
 @pytest.mark.django_db
@@ -281,13 +266,9 @@ def test_recurring_multiple_declines_do_not_extend_and_keep_token(client):
     assert r_ok.status_code == 200
 
     # успешная рекуррентка для заполнения токена в подписке
-    import time as _t
-    ts = int(_t.time())
-    ref_reg_ok = f"{plan.bot_id}_{user.user_id}_{plan.id}_{ts}_WFPREG-x"
-    Invoice.objects.create(
-        order_reference=ref_reg_ok, user=user, plan=plan, bot_id=1,
-        amount=plan.price, currency=plan.currency, payment_status=PaymentStatus.PENDING,
-    )
+    # НЕ создаём новый Invoice! Используем orderReference с суффиксом
+    ref_reg_ok = f"{first_ref}_WFPREG-x"
+    
     payload_reg_ok = {
         "merchantAccount": "test_merch_n1",
         "orderReference": ref_reg_ok,
@@ -309,13 +290,10 @@ def test_recurring_multiple_declines_do_not_extend_and_keep_token(client):
     assert token_before == "tok_keep_me"
 
     # 2) три подряд DECLINED по рекуррентке
+    # НЕ создаём новые Invoice! Используем orderReference с суффиксами
     for suffix in ("d1", "d2", "d3"):
-        ts = int(_t.time())
-        ref_decl = f"{plan.bot_id}_{user.user_id}_{plan.id}_{ts}_WFPREG-{suffix}"
-        Invoice.objects.create(
-            order_reference=ref_decl, user=user, plan=plan, bot_id=1,
-            amount=plan.price, currency=plan.currency, payment_status=PaymentStatus.PENDING,
-        )
+        ref_decl = f"{first_ref}_WFPREG-{suffix}"
+        
         payload_decl = {
             "merchantAccount": "test_merch_n1",
             "orderReference": ref_decl,
@@ -337,6 +315,7 @@ def test_recurring_multiple_declines_do_not_extend_and_keep_token(client):
     assert sub.expires_at == expires_before
     assert sub.card_token == token_before
     assert sub.card_masked == masked_before
+
 
 @covers("S6.3")
 @pytest.mark.django_db
@@ -379,13 +358,9 @@ def test_recurring_refunded_does_not_extend_and_keeps_token(client):
     assert sub.card_masked == "444455******1111"
 
     # 2) Рекуррентный инвойс, который WFP помечает REFUNDED (или REVERSED/CHARGEBACK)
-    import time as _t
-    ts = int(_t.time())
-    ref_refund = f"{plan.bot_id}_{user.user_id}_{plan.id}_{ts}_WFPREG-r"
-    inv_ref = Invoice.objects.create(
-        order_reference=ref_refund, user=user, plan=plan, bot_id=1,
-        amount=plan.price, currency=plan.currency, payment_status=PaymentStatus.PENDING,
-    )
+    # НЕ создаём новый Invoice! Используем orderReference с суффиксом
+    ref_refund = f"{ref_ok}_WFPREG-r"
+    
     payload_refund = {
         "merchantAccount": "test_merch_n1",
         "orderReference": ref_refund,
@@ -402,13 +377,7 @@ def test_recurring_refunded_does_not_extend_and_keeps_token(client):
     assert r2.json().get("status") == "accept"
 
     # Проверяем, что подписка не продлилась и токен/маска не изменились
-    from datetime import timedelta
     sub.refresh_from_db()
     assert sub.expires_at == first_expire
     assert sub.card_token == "tok_keep"
     assert sub.card_masked == "444455******1111"
-
-    # Инвойс с REFUNDED не стал APPROVED и не «понизил» уже оплаченные
-    inv_ref.refresh_from_db()
-
-    assert inv_ref.payment_status == PaymentStatus.REFUNDED
