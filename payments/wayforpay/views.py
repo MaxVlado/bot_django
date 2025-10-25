@@ -72,8 +72,36 @@ class ReturnView(View):
     
     def get(self, request):
         order_reference = request.GET.get('orderReference')
-        # TODO: показать пользователю статус платежа
-        return JsonResponse({"status": "success", "orderReference": order_reference})
-    
+        
+        # Если нет orderReference
+        if not order_reference:
+            return JsonResponse({
+                "status": "error",
+                "error": "orderReference required"
+            })
+        
+        # Ищем Invoice
+        try:
+            invoice = Invoice.objects.get(order_reference=order_reference)
+        except Invoice.DoesNotExist:
+            return JsonResponse({
+                "status": "error", 
+                "error": "Invoice not found"
+            })
+        
+        # Определяем статус для пользователя
+        if invoice.payment_status == PaymentStatus.APPROVED:
+            status = "approved"
+        elif invoice.payment_status == PaymentStatus.DECLINED:
+            status = "declined"
+        else:  # PENDING и все остальные
+            status = "pending"
+        
+        return JsonResponse({
+            "status": status,
+            "payment_status": invoice.payment_status.value if hasattr(invoice.payment_status, 'value') else str(invoice.payment_status),
+            "orderReference": order_reference
+        })
+
     def post(self, request):
         return self.get(request)
