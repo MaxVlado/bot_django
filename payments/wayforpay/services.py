@@ -348,7 +348,16 @@ class WayForPayService:
         user, _ = TelegramUser.objects.get_or_create(user_id=user_id)
         
         amount = float(payload.get('amount', 0))
-        duration_days = plan.duration_days
+
+        # Получаем invoice для чтения snapshot duration_days (если есть)
+        inv = Invoice.objects.filter(order_reference=base_reference).first()
+        if inv and inv.raw_request_payload and 'planDurationDays' in inv.raw_request_payload:
+            duration_days = int(inv.raw_request_payload['planDurationDays'])
+            logger.info(f"Using snapshot duration_days={duration_days} from invoice")
+        else:
+            duration_days = plan.duration_days
+            logger.info(f"Using current plan duration_days={duration_days}")
+
         transaction_id = payload.get('transactionId')
         
         # Дата начала
@@ -401,7 +410,7 @@ class WayForPayService:
         # Устанавливаем связь invoice -> subscription
         inv.subscription_id = subscription.id
         inv.save(update_fields=['subscription_id', 'updated_at'])
-        
+
         self._update_verified_user(bot_id, user_id, payload, inv)
         
         # Проверяем debounce и отправляем уведомление
