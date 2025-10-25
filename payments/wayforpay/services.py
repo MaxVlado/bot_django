@@ -132,8 +132,7 @@ class WayForPayService:
         except Exception as e:
             raise ValueError(f"Failed to create invoice: {e}")
       
-    # payments/wayforpay/services.py
-
+   
     @transaction.atomic
     def handle_webhook(self, payload: Dict) -> Dict:
         """
@@ -153,19 +152,14 @@ class WayForPayService:
             logger.error('Invalid signature from WayForPay')
             return {"status": "accept", "message": "Invalid signature"}
         
-        # 2. Проверка валюты
-        if payload.get('currency') != 'UAH':
-            logger.warning(f"Invalid currency: {payload.get('currency')}")
-            return {"message": "Unsupported currency"}
-        
-        # 3. Получаем orderReference
+        # 2. Получаем orderReference (перенесли выше, до проверки валюты)
         order_reference = payload.get('orderReference', '').strip().rstrip(';')
         
         if not order_reference:
             logger.error("orderReference is missing")
             return {"status": "accept", "message": "orderReference required"}
         
-        # 4. Парсинг orderReference
+        # 3. Парсинг orderReference
         try:
             user_id, plan_id, timestamp = self.api.parse_order_reference(order_reference)
             logger.info(f"✅ Parsed: user_id={user_id}, plan_id={plan_id}, timestamp={timestamp}")
@@ -185,34 +179,58 @@ class WayForPayService:
                 return {"status": "accept", "message": "Invoice not found"}
             
             user_id = invoice.user.user_id
-            plan_id = invoice.plan_id
+            plan = invoice.plan  # ⭐ Получаем объект plan
             bot_id = invoice.bot_id
             
-            logger.info(f"✅ Fallback success: user_id={user_id}, plan_id={plan_id}, bot_id={bot_id}")
+            logger.info(f"✅ Fallback success: user_id={user_id}, plan_id={plan.id}, bot_id={bot_id}")
             
-            # Переходим к обработке
+            # Переходим к обработке (передаем объект plan)
             base_reference = order_reference.split('_WFPREG-')[0]
-            return self._process_payment_status(payload, user_id, plan_id, bot_id, base_reference)
+            return self._process_payment_status(payload, user_id, plan, bot_id, base_reference)
         
-        # 5. Получаем Plan и bot_id
-        from subscriptions.models import Plan
-        plan = Plan.objects.filter(id=plan_id, enabled=True).first()
+        # 4. ⭐ НОВОЕ: Находим Invoice для валидации суммы и валюты
+        base_reference_for_lookup = order_reference.split('_WFPREG-')[0]
         
-        if not plan:
-            logger.error(f"Plan {plan_id} not found or disabled")
-            return {"status": "accept", "message": "Plan not available"}
+        invoice = Invoice.objects.filter(
+            order_reference=base_reference_for_lookup
+        ).select_related('user', 'plan').first()
         
-        bot_id = plan.bot_id
-        logger.info(f"Bot ID from plan: {bot_id}")
+        if not invoice:
+            logger.error(f"❌ Invoice not found: {base_reference_for_lookup}")
+            return {"status": "accept", "message": "Invoice not found"}
         
-        # Замените строки примерно с 207 по 222 в payments/wayforpay/services.py
-
-        # 6. Проверка дубликатов
+        
+        
+        # 5. ⭐ НОВОЕ: Проверка валюты (case-insensitive, из Invoice)
+        payload_currency = str(payload.get('currency', '')).upper()
+        invoice_currency = str(invoice.currency).upper()
+        
+        if payload_currency != invoice_currency:
+            logger.warning(f"Currency mismatch: payload={payload_currency}, invoice={invoice_currency}")
+            return {"status": "accept", "message": "Currency mismatch"}
+        
+        # 6. ⭐ НОВОЕ: Проверка суммы (для APPROVED)
+        transaction_status = str(payload.get('transactionStatus', '')).upper()
+        
+        if transaction_status == 'APPROVED':
+            payload_amount = float(payload.get('amount', 0))
+            invoice_amount = float(invoice.amount)
+            
+            # Допускаем погрешность 0.01 для сравнения float
+            if abs(payload_amount - invoice_amount) > 0.01:
+                logger.warning(f"Amount mismatch: payload={payload_amount}, invoice={invoice_amount}")
+                return {"status": "accept", "message": "Amount mismatch"}
+        
+        # 7. ⭐ ИЗМЕНЕНО: Используем данные из Invoice вместо поиска плана
+        plan = invoice.plan
+        bot_id = invoice.bot_id
+        
+        logger.info(f"Using Invoice data: plan_id={plan.id}, bot_id={bot_id}")
+        
+        # 8. Проверка дубликатов (существующая логика)
         base_reference = order_reference.split('_WFPREG-')[0]
-
-        # ⭐ ИСПРАВЛЕНИЕ: различаем дубликат и рекуррентный платеж
         is_recurring = '_WFPREG' in order_reference
-
+        
         if not is_recurring:
             # Это обычный платеж - проверяем дубликат
             existing_invoice = Invoice.objects.filter(
@@ -222,15 +240,14 @@ class WayForPayService:
             
             if existing_invoice:
                 logger.info(f"🔄 Duplicate webhook for: {order_reference}")
-                #self._update_invoice_fields(existing_invoice, payload)
                 return {"status": "accept"}
         else:
             # Это рекуррентный платеж - обрабатываем как новый
             logger.info(f"💳 Recurring payment detected: {order_reference}")
-
-        # 7. Обработка платежа (для новых и рекуррентных)
-        return self._process_payment_status(payload, user_id, plan_id, bot_id, base_reference)
-   
+        
+        # 9. Обработка платежа (передаем объект plan, не plan.id)
+        return self._process_payment_status(payload, user_id, plan, bot_id, base_reference)
+    
     def _update_invoice_fields(self, invoice: Invoice, payload: Dict):
         """Обновление полей инвойса без перезаписи существующих значений"""
         
@@ -253,11 +270,16 @@ class WayForPayService:
         invoice.reason_code = invoice.reason_code or payload.get('reasonCode')
         invoice.save()
    
-    def _process_payment_status(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str) -> Dict:
-        """Обработка статуса платежа с нормализацией"""
+    def _process_payment_status(self, payload: Dict, user_id: int, plan, bot_id: int, base_reference: str) -> Dict:
+        """
+        Обработка статуса платежа с нормализацией
+        
+        Args:
+            plan: Объект Plan (не plan_id!) - берется из Invoice
+        """
         import logging
         from django.utils import timezone
-        from subscriptions.models import Plan, Subscription
+        from subscriptions.models import Subscription
         from core.models import TelegramUser
         
         logger = logging.getLogger(__name__)
@@ -265,19 +287,18 @@ class WayForPayService:
         # ДОБАВЛЕНО: нормализация статуса (case-insensitive)
         transaction_status = payload.get('transactionStatus', '').upper()
         
-        # Проверяем, что план всё ещё доступен
-        plan = Plan.objects.filter(id=plan_id, enabled=True).first()
-        if not plan:
-            logger.warning(f"Plan {plan_id} is no longer available")
-            return {"status": "accept", "message": "Plan not available"}
+        # ⭐ ИЗМЕНЕНО: НЕ ищем план заново, используем переданный объект
+        # plan уже получен из Invoice и может быть disabled - это нормально
+        plan_id = plan.id
+        logger.info(f"Processing payment with plan_id={plan_id}, status={transaction_status}")
         
         if transaction_status == 'APPROVED':
             return self._handle_approved_payment(payload, user_id, plan_id, bot_id, base_reference)
-        elif transaction_status in ['DECLINED', 'EXPIRED', 'CANCELED', 'REFUNDED']:
+        elif transaction_status in ['DECLINED', 'EXPIRED', 'CANCELED']:
             return self._handle_declined_payment(payload, user_id, plan_id, bot_id, base_reference)
         else:
             logger.warning(f"Unknown transaction status: {transaction_status}")
-            return {"status": "accept", "message": f"Unknown status: {transaction_status}"} 
+            return {"status": "accept", "message": f"Unknown status: {transaction_status}"}
         
     def _handle_approved_payment(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str) -> Dict:
         """Обработка успешного платежа"""
