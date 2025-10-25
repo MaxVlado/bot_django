@@ -278,7 +278,7 @@ class WayForPayService:
             logger.info(f"💳 Recurring payment detected: {order_reference}")
         
         # 9. Обработка платежа (передаем объект plan, не plan.id)
-        return self._process_payment_status(payload, user_id, plan, bot_id, base_reference)
+        return self._process_payment_status(payload, user_id, plan, bot_id, base_reference, is_recurring)
     
     def _update_invoice_fields(self, invoice: Invoice, payload: Dict):
         """Обновление полей инвойса без перезаписи существующих значений"""
@@ -302,7 +302,7 @@ class WayForPayService:
         invoice.reason_code = invoice.reason_code or payload.get('reasonCode')
         invoice.save()
    
-    def _process_payment_status(self, payload: Dict, user_id: int, plan, bot_id: int, base_reference: str) -> Dict:
+    def _process_payment_status(self, payload: Dict, user_id: int, plan, bot_id: int, base_reference: str, is_recurring: bool = False) -> Dict:
         """
         Обработка статуса платежа с нормализацией
         
@@ -325,14 +325,14 @@ class WayForPayService:
         logger.info(f"Processing payment with plan_id={plan_id}, status={transaction_status}")
         
         if transaction_status == 'APPROVED':
-            return self._handle_approved_payment(payload, user_id, plan_id, bot_id, base_reference)
+            return self._handle_approved_payment(payload, user_id, plan_id, bot_id, base_reference, is_recurring)
         elif transaction_status in ['DECLINED', 'EXPIRED', 'CANCELED']:
             return self._handle_declined_payment(payload, user_id, plan_id, bot_id, base_reference)
         else:
             logger.warning(f"Unknown transaction status: {transaction_status}")
             return {"status": "accept", "message": f"Unknown status: {transaction_status}"}
         
-    def _handle_approved_payment(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str) -> Dict:
+    def _handle_approved_payment(self, payload: Dict, user_id: int, plan_id: int, bot_id: int, base_reference: str, is_recurring: bool = False) -> Dict:
         """Обработка успешного платежа"""
         import logging
         from django.utils import timezone
@@ -343,10 +343,31 @@ class WayForPayService:
         
         logger = logging.getLogger(__name__)
         
-        # Получаем план и пользователя
+       # Получаем план и пользователя
         plan = Plan.objects.get(id=plan_id)
         user, _ = TelegramUser.objects.get_or_create(user_id=user_id)
-        
+
+        # ⭐ АТОМАРНАЯ БЛОКИРОВКА: Пытаемся захватить обработку
+        # Обновляем статус ТОЛЬКО если он PENDING (атомарно на уровне БД)
+        from payments.models import Invoice
+        # ⭐ АТОМАРНАЯ БЛОКИРОВКА только для НЕ рекуррентных платежей
+        if not is_recurring:
+            updated_count = Invoice.objects.filter(
+                order_reference=base_reference,
+                payment_status=PaymentStatus.PENDING
+            ).update(
+                payment_status='PROCESSING',
+                updated_at=timezone.now()
+            )
+            
+            if updated_count == 0:
+                logger.info(f"🔄 Invoice already being processed, skipping: {base_reference}")
+                return {"status": "accept"}
+            
+            logger.info(f"✅ Captured invoice for processing: {base_reference}")
+
+            
+
         amount = float(payload.get('amount', 0))
 
         # Получаем invoice для чтения snapshot duration_days (если есть)
@@ -363,21 +384,30 @@ class WayForPayService:
         # Дата начала
         starts_from = timezone.now()
         
-        # Работа с подпиской
-        subscription, created = Subscription.objects.get_or_create(
-            bot_id=bot_id,
-            user=user,
-            defaults={
-                'user': user,
-                'plan': plan,
-                'starts_at': starts_from,
-                'expires_at': starts_from + timedelta(days=duration_days),
-                'status': SubscriptionStatus.ACTIVE,
-                'amount': amount,
-                'order_reference': base_reference,
-                'transaction_id': transaction_id,
-            }
-        )
+        # Работа с подпиской (с защитой от race condition)
+        try:
+            # Пытаемся получить с блокировкой
+            subscription = Subscription.objects.select_for_update().get(
+                bot_id=bot_id,
+                user=user
+            )
+            created = False
+        except Subscription.DoesNotExist:
+            # Если нет - создаем
+            subscription, created = Subscription.objects.get_or_create(
+                bot_id=bot_id,
+                user=user,
+                defaults={
+                    'user': user,
+                    'plan': plan,
+                    'starts_at': starts_from,
+                    'expires_at': starts_from + timedelta(days=duration_days),
+                    'status': SubscriptionStatus.ACTIVE,
+                    'amount': amount,
+                    'order_reference': base_reference,
+                    'transaction_id': transaction_id,
+                }
+            )
         
         if created:
             # Новая подписка

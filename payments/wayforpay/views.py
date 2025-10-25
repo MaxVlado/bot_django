@@ -61,8 +61,14 @@ class WebhookView(View):
             return JsonResponse(result, status=200)
             
         except Exception as e:
+            # Критические DB ошибки пробрасываем - нужен 5xx для ретрая WFP
+            from django.db import utils as db_utils
+            if isinstance(e, (db_utils.OperationalError, db_utils.IntegrityError)):
+                logger.error(f"Critical DB error in webhook: {e}", exc_info=True)
+                raise  # Пробрасываем для 5xx
+            
+            # Остальные ошибки логируем и возвращаем accept
             logger.error(f"Webhook processing error: {e}", exc_info=True)
-            # Всё равно возвращаем 200, чтобы WFP не ретраил
             return JsonResponse({"status": "accept", "message": str(e)}, status=200)
 
 
