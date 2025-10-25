@@ -159,6 +159,20 @@ class WayForPayService:
             logger.error("orderReference is missing")
             return {"status": "accept", "message": "orderReference required"}
         
+        # 2.5. Проверка TTL (защита от replay-атак старыми webhook)
+        ttl_seconds = getattr(settings, 'WAYFORPAY_WEBHOOK_TTL_SECONDS', None)
+        if ttl_seconds:
+            processing_date = payload.get('processingDate')
+            if processing_date:
+                from django.utils import timezone
+                now_ts = int(timezone.now().timestamp())
+                age_seconds = now_ts - int(processing_date)
+                
+                if age_seconds > ttl_seconds:
+                    logger.warning(f"⚠️ Webhook too old: age={age_seconds}s, TTL={ttl_seconds}s")
+                    return {"status": "accept", "message": "Webhook expired"}
+
+        
         # 3. Парсинг orderReference
         try:
             user_id, plan_id, timestamp = self.api.parse_order_reference(order_reference)
