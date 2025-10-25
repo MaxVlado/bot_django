@@ -199,7 +199,25 @@ class WayForPayService:
             logger.error(f"❌ Invoice not found: {base_reference_for_lookup}")
             return {"status": "accept", "message": "Invoice not found"}
         
-        
+        # 4.5. ⭐ НОВОЕ: Проверка merchantAccount (опциональная, для безопасности)
+        verify_merchant = getattr(settings, 'WAYFORPAY_VERIFY_MERCHANT', False)
+
+        if verify_merchant:
+            bot_id = invoice.bot_id
+            from payments.models import MerchantConfig
+            
+            try:
+                merchant_config = MerchantConfig.objects.get(bot_id=bot_id)
+                payload_merchant = payload.get('merchantAccount', '').strip()
+                expected_merchant = merchant_config.merchant_account.strip()
+                
+                if payload_merchant != expected_merchant:
+                    logger.warning(f"Foreign merchant account: payload={payload_merchant}, expected={expected_merchant}")
+                    return {"status": "accept", "message": "Foreign merchant account"}
+            except MerchantConfig.DoesNotExist:
+                logger.warning(f"MerchantConfig not found for bot_id={bot_id}, skipping merchant verification")
+                # Продолжаем обработку, т.к. MerchantConfig может отсутствовать в некоторых сценариях
+
         
         # 5. ⭐ НОВОЕ: Проверка валюты (case-insensitive, из Invoice)
         payload_currency = str(payload.get('currency', '')).upper()

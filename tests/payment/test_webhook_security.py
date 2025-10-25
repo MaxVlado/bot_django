@@ -71,6 +71,18 @@ def test_foreign_merchant_account_is_ignored(client, settings):
     Ожидаем: ACK 'accept', но инвойс/подписка НЕ меняются.
     """
     settings.WAYFORPAY_VERIFY_SIGNATURE = True
+    settings.WAYFORPAY_VERIFY_MERCHANT = True
+
+    # Создать MerchantConfig для бота
+    from payments.models import MerchantConfig
+    from core.models import Bot
+    
+    bot = Bot.objects.create(bot_id=1, title="Test Bot", username="testbot", token="test")
+    MerchantConfig.objects.create(
+        bot=bot,
+        merchant_account="test_merch_n1",  # Наш правильный merchant
+        secret_key="test_secret"
+    )
 
     user = TelegramUser.objects.create(user_id=777000777, username="foreign", first_name="Merch")
     plan = Plan.objects.create(bot_id=1, name="Plan", price=7, currency="UAH", duration_days=30, enabled=True)
