@@ -63,7 +63,7 @@ class WebhookView(View):
         except Exception as e:
             logger.error(f"Webhook processing error: {e}", exc_info=True)
             # Всё равно возвращаем 200, чтобы WFP не ретраил
-            return JsonResponse({"status": "error", "message": str(e)}, status=200)
+            return JsonResponse({"status": "accept", "message": str(e)}, status=200)
 
 
 @method_decorator(csrf_exempt, name="dispatch")

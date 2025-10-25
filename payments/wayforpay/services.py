@@ -344,7 +344,7 @@ class WayForPayService:
         logger = logging.getLogger(__name__)
         
         # Получаем план и пользователя
-        plan = Plan.objects.get(id=plan_id, enabled=True)
+        plan = Plan.objects.get(id=plan_id)
         user, _ = TelegramUser.objects.get_or_create(user_id=user_id)
         
         amount = float(payload.get('amount', 0))
