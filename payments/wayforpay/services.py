@@ -398,6 +398,10 @@ class WayForPayService:
         # Создаем/обновляем VerifiedUser
         # Сначала создаём/обновляем invoice, потом вызываем _update_verified_user
         inv = Invoice.objects.get(order_reference=base_reference)
+        # Устанавливаем связь invoice -> subscription
+        inv.subscription_id = subscription.id
+        inv.save(update_fields=['subscription_id', 'updated_at'])
+        
         self._update_verified_user(bot_id, user_id, payload, inv)
         
         # Проверяем debounce и отправляем уведомление
