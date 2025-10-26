@@ -634,8 +634,23 @@ class WayForPayService:
             logger.info(f'success_notification_suppressed: user_id={user_id}, bot_id={bot_id}, window_min={debounce_minutes}')
         else:
             try:
-                # Здесь должен быть вызов телеграм сервиса для отправки уведомления
-                # self.telegram_service.notify_about_payment(bot_id, user_id, subscription.expires_at)
+                # Получаем бота для отправки уведомления
+                from core.models import Bot
+                from payments.notifications import TelegramNotificationService
+                from subscriptions.models import Plan
+                
+                bot = Bot.objects.get(bot_id=bot_id)
+                plan = Plan.objects.get(id=plan_id)
+                
+                # Создаем сервис и отправляем уведомление
+                telegram_service = TelegramNotificationService(bot.token)
+                telegram_service.notify_payment_success(
+                    user_id=user_id,
+                    plan_name=plan.name,
+                    amount=subscription.amount,
+                    currency=plan.currency,
+                    expires_at=subscription.expires_at
+                )
                 logger.info(f'Payment notification sent to user {user_id}')
             except Exception as e:
                 logger.error(f'Payment notification failed: {e}')

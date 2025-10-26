@@ -1,12 +1,14 @@
 # payments/wayforpay/views.py
 
 import json
-from django.http import JsonResponse, HttpResponseBadRequest
+from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from payments.models import Invoice, PaymentStatus
 from .services import WayForPayService
+from core.models import Bot
+
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -79,12 +81,38 @@ class ReturnView(View):
     def get(self, request):
         order_reference = request.GET.get('orderReference')
         
-        # Если нет orderReference
+        # Если нет orderReference - редирект на бота
         if not order_reference:
-            return JsonResponse({
-                "status": "error",
-                "error": "orderReference required"
-            })
+            try:
+                bot = Bot.objects.filter(is_enabled=True).first()
+                if bot:
+                    bot_username = bot.username
+                    return HttpResponse(f"""
+                        <html>
+                        <head>
+                            <title>Оплата завершена</title>
+                            <meta http-equiv="refresh" content="3;url=https://t.me/{bot_username}">
+                        </head>
+                        <body style="font-family: Arial; text-align: center; padding: 50px;">
+                            <h1>✅ Оплата обработана!</h1>
+                            <p>Возвращаем вас в Telegram бот...</p>
+                            <p><a href="https://t.me/{bot_username}" style="font-size: 20px;">Открыть бот @{bot_username}</a></p>
+                        </body>
+                        </html>
+                    """)
+            except:
+                pass
+            
+            # Если бот не найден - общая страница без редиректа
+            return HttpResponse("""
+                <html>
+                <head><title>Оплата завершена</title></head>
+                <body style="font-family: Arial; text-align: center; padding: 50px;">
+                    <h1>✅ Оплата обработана!</h1>
+                    <p>Вернитесь в Telegram бот для проверки статуса.</p>
+                </body>
+                </html>
+            """)
         
         # Ищем Invoice
         try:
