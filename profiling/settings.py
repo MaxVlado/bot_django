@@ -47,7 +47,7 @@ INSTALLED_APPS = [
     # Local apps
     'core',
     'subscriptions',
-    'payments',"botops",'leads',
+    'payments',"botops",'leads','content',
     # Интеграцию WayForPay делаем внутри payments (без отдельного приложения)
 ]
 

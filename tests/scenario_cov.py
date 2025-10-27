@@ -174,6 +174,7 @@ def pytest_configure(config):
         base / "payment" /"scenarios.yml",
         base / "bot" / "scenarios.yml",
         base / "bot_admin_merchant" /"scenarios.yml",
+        base / "content" / "scenarios.yml",
     ]
     for p in candidates:
         _tracker.load_scenarios(p)

@@ -1,0 +1,154 @@
+# Сценарии тестирования content приложения
+# Категории: C1 (модели), C2 (инициализация), C3 (scheduler), C4 (мультитопики)
+# Формат: id / desc / category / priority
+
+# C1 — Модели данных
+- id: "C1.1"
+  desc: "ContentTopic создается с корректными полями (title, sequence_number, duration_days)"
+  category: "Модели"
+  priority: "critical"
+
+- id: "C1.2"
+  desc: "TopicPlanAccess связывает план и топик с month_number"
+  category: "Модели"
+  priority: "critical"
+
+- id: "C1.3"
+  desc: "Phase создается с slug, title, default_time"
+  category: "Модели"
+  priority: "high"
+
+- id: "C1.4"
+  desc: "ContentLesson привязывается к топику с lesson_number (уникальность)"
+  category: "Модели"
+  priority: "critical"
+
+- id: "C1.5"
+  desc: "ContentPost с медиа файлом: post_type автоопределяется (audio/video/photo)"
+  category: "Модели"
+  priority: "critical"
+
+- id: "C1.6"
+  desc: "ContentPost только с текстом: post_type='text'"
+  category: "Модели"
+  priority: "high"
+
+- id: "C1.7"
+  desc: "ContentPost с текстом + медиа: post_type определяется по медиа"
+  category: "Модели"
+  priority: "high"
+
+- id: "C1.8"
+  desc: "ContentPost валидация: должен быть content ИЛИ media_file"
+  category: "Модели"
+  priority: "high"
+
+- id: "C1.9"
+  desc: "UserContentProgress создается с current_lesson_number=1 при старте"
+  category: "Модели"
+  priority: "critical"
+
+# C2 — Инициализация контента при оплате
+- id: "C2.1"
+  desc: "Первая оплата плана: создается UserContentProgress для топика с sequence_number=1"
+  category: "Инициализация"
+  priority: "critical"
+
+- id: "C2.2"
+  desc: "Вторая оплата (продление): создается прогресс для топика sequence_number=2"
+  category: "Инициализация"
+  priority: "critical"
+
+- id: "C2.3"
+  desc: "Оплата в 23:00 (после всех постов дня 1): отправить все посты дня 1 немедленно"
+  category: "Инициализация"
+  priority: "high"
+
+- id: "C2.4"
+  desc: "Оплата в 07:00 (до первого поста дня 1): посты идут по расписанию"
+  category: "Инициализация"
+  priority: "high"
+
+- id: "C2.5"
+  desc: "Если для month_number нет топика: не создавать UserContentProgress"
+  category: "Инициализация"
+  priority: "normal"
+
+# C3 — Scheduler рассылки контента
+- id: "C3.1"
+  desc: "Посты дня 2+ отправляются строго по send_time"
+  category: "Scheduler"
+  priority: "critical"
+
+- id: "C3.2"
+  desc: "Уже отправленные посты не отправляются повторно (идемпотентность)"
+  category: "Scheduler"
+  priority: "critical"
+
+- id: "C3.3"
+  desc: "После отправки поста: обновить last_post_sent_id и last_sent_at"
+  category: "Scheduler"
+  priority: "high"
+
+- id: "C3.4"
+  desc: "current_lesson_number обновляется при переходе на следующий день"
+  category: "Scheduler"
+  priority: "high"
+
+- id: "C3.5"
+  desc: "Завершение курса: completed=True когда все дни пройдены"
+  category: "Scheduler"
+  priority: "normal"
+
+- id: "C3.6"
+  desc: "Заблокированный пользователь (is_blocked=True): посты не отправляются"
+  category: "Scheduler"
+  priority: "high"
+
+- id: "C3.7"
+  desc: "Неактивная подписка (status!=active): посты не отправляются"
+  category: "Scheduler"
+  priority: "high"
+
+# C4 — Множественные топики
+- id: "C4.1"
+  desc: "Пользователь с несколькими активными топиками: прогресс независим"
+  category: "Мультитопики"
+  priority: "high"
+
+- id: "C4.2"
+  desc: "Один план дает доступ к нескольким топикам (разные month_number)"
+  category: "Мультитопики"
+  priority: "normal"
+
+# C5 — Отправка в Telegram
+- id: "C5.1"
+  desc: "post_type='text': использовать send_message"
+  category: "Telegram API"
+  priority: "critical"
+
+- id: "C5.2"
+  desc: "post_type='audio': использовать send_audio с caption"
+  category: "Telegram API"
+  priority: "critical"
+
+- id: "C5.3"
+  desc: "post_type='video': использовать send_video с caption"
+  category: "Telegram API"
+  priority: "critical"
+
+- id: "C5.4"
+  desc: "post_type='photo': использовать send_photo с caption"
+  category: "Telegram API"
+  priority: "critical"
+
+# C6 — Обработка ошибок
+- id: "C6.1"
+  desc: "Ошибка отправки поста: не блокировать дальнейшую рассылку"
+  category: "Ошибки"
+  priority: "high"
+
+- id: "C6.2"
+  desc: "Отсутствующий медиа файл: логировать ошибку, не падать"
+  category: "Ошибки"
+  priority: "normal"
