@@ -151,7 +151,7 @@ async def run_webhook(bot_model: BotModel):
 
 3. Все handlers Lead Bot работают с префиксами:
    - Команды: /start, /cancel
-   - Callback data: phone:*, comment:*, confirm:*, new_question
+   - Callback data: phone:*, comment:*, confirm:*,
 
 4. FSM состояния хранятся в памяти (или Redis, если настроен storage).
 

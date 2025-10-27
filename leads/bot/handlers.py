@@ -12,8 +12,7 @@ from .keyboards import (
     get_phone_keyboard,
     get_phone_validation_keyboard,
     get_comment_question_keyboard,
-    get_confirmation_keyboard,
-    get_question_keyboard
+    get_confirmation_keyboard
 )
 from .utils import (
     validate_phone,
@@ -129,8 +128,7 @@ async def cmd_cancel(message: Message, state: FSMContext):
     
     await state.clear()
     await message.answer(
-        "Операція скасована. Щоб почати заново, натисніть /start",
-        reply_markup=get_question_keyboard()
+        "Операція скасована. Щоб почати заново, натисніть /start"
     )
 
 
@@ -486,7 +484,7 @@ async def confirm_and_save(callback: CallbackQuery, state: FSMContext, bot: Bot,
         # Отправляем подтверждение пользователю
         await callback.message.edit_text(
             success_text,
-            reply_markup=get_question_keyboard(),
+            reply_markup=None,
             parse_mode='HTML'
         )
         
@@ -497,7 +495,7 @@ async def confirm_and_save(callback: CallbackQuery, state: FSMContext, bot: Bot,
         logger.error(f"Error saving lead for user {callback.from_user.id}: {e}")
         await callback.message.edit_text(
             "❌ Виникла помилка при збереженні заявки. Будь ласка, спробуйте ще раз або зв'яжіться з підтримкою.",
-            reply_markup=get_question_keyboard()
+            reply_markup=None
         )
         await state.clear()
 
@@ -509,22 +507,6 @@ async def confirm_edit(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         "Гаразд, почнемо заново.\n\nВведіть ваше ім'я:",
-        reply_markup=None
-    )
-    await state.set_state(LeadForm.waiting_for_name)
-
-
-@router.callback_query(F.data == "new_question")
-async def new_question(callback: CallbackQuery, state: FSMContext, bot_id: int):
-    """Обработка кнопки 'Є питання' - начало новой заявки"""
-    await callback.answer()
-    
-    # Получаем конфигурацию
-    config = await get_bot_config(bot_id)
-    welcome_text = config.welcome_text if config else "Привіт! Я допоможу вам залишити заявку.\n\nВведіть ваше ім'я:"
-    
-    await callback.message.edit_text(
-        welcome_text,
         reply_markup=None
     )
     await state.set_state(LeadForm.waiting_for_name)

@@ -58,11 +58,4 @@ def get_confirmation_keyboard() -> InlineKeyboardMarkup:
     return keyboard
 
 
-def get_question_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура с кнопкой 'Залишити нову заявку'"""
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Залишити нову заявку", callback_data="new_question")]
-        ]
-    )
-    return keyboard
+
