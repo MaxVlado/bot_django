@@ -77,10 +77,23 @@ def test_foreign_merchant_account_is_ignored(client, settings):
     from payments.models import MerchantConfig
     from core.models import Bot
     
-    bot = Bot.objects.create(bot_id=1, title="Test Bot", username="testbot", token="test")
+   # Используем get_or_create чтобы избежать конфликта с content тестами
+    bot, created = Bot.objects.get_or_create(
+        bot_id=1,
+        defaults={
+            'title': "Test Bot",
+            'username': "testbot",
+            'token': "test"
+        }
+    )
+
+    # Удаляем старый MerchantConfig если есть
+    MerchantConfig.objects.filter(bot=bot).delete()
+
+    # Создаем новый MerchantConfig
     MerchantConfig.objects.create(
         bot=bot,
-        merchant_account="test_merch_n1",  # Наш правильный merchant
+        merchant_account="test_merch_n1",
         secret_key="test_secret"
     )
 

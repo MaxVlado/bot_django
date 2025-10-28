@@ -1,16 +1,11 @@
 """
 B1.3 — «Продлить подписку»: показ списка активных тарифов по текущему BOT_ID.
-
-Ожидание:
-- Хендлер on_renew рендерит текст "Выберите тариф для продления:"
-- В inline-клавиатуре есть кнопки по числу планов + кнопка «Назад»
-- Кнопки оплаты имеют callback_data вида "pay:<plan_id>"
 """
 import asyncio
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-from bot.main import on_renew  # noqa: E402
+from bot.subscriptions import on_renew  # ✅ ИЗМЕНЕНО: импорт из subscriptions
 
 
 class FakeFromUser:
@@ -42,9 +37,6 @@ class FakeCallbackQuery:
 class FakePool:
     """
     Минимальный мок asyncpg.Pool.
-    Нужно:
-      - fetchval(...) -> is_blocked=False
-      - fetch(...) -> список планов (id, name, price, currency, duration_days)
     """
     def __init__(self, blocked: bool = False, plans=None):
         self._blocked = blocked
@@ -54,22 +46,32 @@ class FakePool:
         return self._blocked
 
     async def fetch(self, *_args, **_kwargs):
-        # Возвращаем список dict-подобных записей
         return self._plans
+
+
+# ✅ ДОБАВЛЕНО: Фейковый bot_model
+class FakeBotModel:
+    def __init__(self, bot_id: int):
+        self.id = bot_id  # ✅ Важно: используется .id, а не .bot_id
+        self.bot_id = bot_id
+        self.title = "Test Bot"
+        self.username = "test_bot"
+        self.token = "TEST_TOKEN"
 
 
 @pytest.mark.covers("B1.3")
 def test_renew_shows_available_plans_list():
     """B1.3: «Продлить подписку» должно показать список активных тарифов и кнопки оплаты."""
     cb = FakeCallbackQuery(user_id=123456)
-    # Два тестовых плана
     plans = [
         {"id": 10, "name": "TEST 4", "price": 4, "currency": "UAH", "duration_days": 7},
         {"id": 11, "name": "TEST 8", "price": 8, "currency": "UAH", "duration_days": 30},
     ]
     pool = FakePool(blocked=False, plans=plans)
+    bot_model = FakeBotModel(bot_id=1)  # ✅ ДОБАВЛЕНО
 
-    asyncio.run(on_renew(cb, pool))
+    # ✅ ИЗМЕНЕНО: добавлен параметр bot_model
+    asyncio.run(on_renew(cb, pool, bot_model))
 
     # Текст-заголовок
     assert cb.message.last_text is not None
@@ -78,9 +80,7 @@ def test_renew_shows_available_plans_list():
     # Клавиатура: 2 кнопки планов + 1 кнопка "Назад"
     kb = cb.message.last_markup
     assert kb is not None and hasattr(kb, "inline_keyboard")
-    # плоский список всех кнопок
     all_buttons = [btn for row in kb.inline_keyboard for btn in row]
-    # найдём кнопки с pay:<id>
     pay_buttons = [b for b in all_buttons if getattr(b, "callback_data", "").startswith("pay:")]
     assert len(pay_buttons) == len(plans)
     assert any(getattr(b, "callback_data", "") == "ui:back" for b in all_buttons) or \

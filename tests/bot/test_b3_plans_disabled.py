@@ -1,16 +1,11 @@
 """
 B3.3 — План выключен (enabled=False): тариф не отображается в списке продления.
-
-Ожидание:
-- on_renew рендерит список только включённых планов (enabled=True).
-- В inline-клавиатуре НЕТ кнопки оплаты для выключенного плана.
-- Есть кнопка «⬅ Назад», колбэк подтверждается.
 """
 import asyncio
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-from bot.main import on_renew  # noqa: E402
+from bot.subscriptions import on_renew  # ✅ ИЗМЕНЕНО
 
 
 class FakeFromUser:
@@ -40,20 +35,21 @@ class FakeCallbackQuery:
 
 
 class FakePool:
-    """
-    Минимальный мок asyncpg.Pool.
-    Нужны:
-      - fetchval(...) -> is_blocked=False
-      - fetch(...) -> список планов; один из них enabled=False
-    """
     def __init__(self, plans):
         self._plans = plans
 
     async def fetchval(self, *_args, **_kwargs):
-        return False  # не заблокирован
+        return False
 
     async def fetch(self, *_args, **_kwargs):
         return self._plans
+
+
+# ✅ ДОБАВЛЕНО
+class FakeBotModel:
+    def __init__(self, bot_id: int):
+        self.id = bot_id
+        self.bot_id = bot_id
 
 
 @pytest.mark.covers("B3.3")
@@ -62,17 +58,16 @@ def test_renew_hides_disabled_plans():
     cb = FakeCallbackQuery(user_id=123456)
     plans = [
         {"id": 10, "name": "TEST 4", "price": 4, "currency": "UAH", "duration_days": 7, "enabled": True},
-        {"id": 99, "name": "OLD 99", "price": 99, "currency": "UAH", "duration_days": 1, "enabled": False},  # выключен
+        {"id": 99, "name": "OLD 99", "price": 99, "currency": "UAH", "duration_days": 1, "enabled": False},
         {"id": 11, "name": "TEST 8", "price": 8, "currency": "UAH", "duration_days": 30, "enabled": True},
     ]
     pool = FakePool(plans=plans)
+    bot_model = FakeBotModel(bot_id=1)  # ✅ ДОБАВЛЕНО
 
-    asyncio.run(on_renew(cb, pool))
+    asyncio.run(on_renew(cb, pool, bot_model))  # ✅ ИЗМЕНЕНО
 
-    # Заголовок
     assert cb.message.last_text and "Выберите тариф" in cb.message.last_text
 
-    # Кнопки: только для enabled=True
     kb = cb.message.last_markup
     assert kb is not None and hasattr(kb, "inline_keyboard")
     buttons = [b for row in kb.inline_keyboard for b in row]
@@ -80,9 +75,8 @@ def test_renew_hides_disabled_plans():
     pay_callbacks = [getattr(b, "callback_data", "") for b in buttons if getattr(b, "callback_data", "").startswith("pay:")]
     assert "pay:10" in pay_callbacks
     assert "pay:11" in pay_callbacks
-    assert "pay:99" not in pay_callbacks, "Выключенный план не должен появляться"
+    assert "pay:99" not in pay_callbacks
 
-    # Есть «Назад» и колбэк подтверждён
     assert any(cbdata == "ui:back" or getattr(b, "text", "") == "⬅ Назад" for b in buttons
                for cbdata in [getattr(b, "callback_data", "")])
     assert cb.answered is True

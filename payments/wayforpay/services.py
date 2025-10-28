@@ -221,7 +221,7 @@ class WayForPayService:
             from payments.models import MerchantConfig
             
             try:
-                merchant_config = MerchantConfig.objects.get(bot_id=bot_id)
+                merchant_config = MerchantConfig.objects.get(bot__bot_id=bot_id)
                 payload_merchant = payload.get('merchantAccount', '').strip()
                 expected_merchant = merchant_config.merchant_account.strip()
                 

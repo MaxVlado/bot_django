@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-from bot.main import on_status  # noqa: E402
+from bot.subscriptions import on_status # noqa: E402
 
 
 class FakeFromUser:
@@ -93,8 +93,8 @@ def test_status_shows_latest_subscription():
 
     cb = FakeCallbackQuery(user_id=123456)
     pool = FakePool(latest_row=latest, old_row=old)
-
-    asyncio.run(on_status(cb, pool))
+    bot_model = FakeBotModel(bot_id=1)
+    asyncio.run(on_status(cb, pool,bot_model))
 
     txt = cb.message.last_text or ""
     # В карточке должен быть «latest» план
@@ -108,3 +108,9 @@ def test_status_shows_latest_subscription():
 
     # Колбэк подтверждён
     assert cb.answered is True
+
+
+class FakeBotModel:
+    def __init__(self, bot_id: int):
+        self.id = bot_id
+        self.bot_id = bot_id

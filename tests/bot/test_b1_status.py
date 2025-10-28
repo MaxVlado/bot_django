@@ -1,19 +1,12 @@
 """
 B1.2 — «Моя подписка» для незарегистрированного пользователя.
-
-Ожидание:
-- Хендлер on_status отвечает текстом о том, что подписка не найдена.
-- Показывается главное меню (inline-клавиатура).
 """
 
 import asyncio
 import pytest
 
-# если aiogram не установлен — тест будет пропущен (а не красный)
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-
-# Импорт хендлера из бота
-from bot.main import on_status  # noqa: E402
+from bot.subscriptions import on_status  # ✅ ИЗМЕНЕНО
 
 
 class FakeFromUser:
@@ -47,30 +40,36 @@ class FakeCallbackQuery:
 class FakePool:
     """
     Минимальный мок asyncpg.Pool.
-    Нужны:
-      - fetchval(...) -> для проверки is_blocked
-      - fetchrow(...) -> для получения статуса подписки (вернём None)
     """
     def __init__(self, blocked: bool = False, row=None):
         self._blocked = blocked
         self._row = row
 
     async def fetchval(self, *_args, **_kwargs):
-        # SELECT is_blocked FROM telegram_users WHERE user_id=$1
         return self._blocked
 
     async def fetchrow(self, *_args, **_kwargs):
-        # Запрос статуса подписки — для B1.2 вернём None (подписка не найдена)
         return self._row
+
+
+# ✅ ДОБАВЛЕНО
+class FakeBotModel:
+    def __init__(self, bot_id: int):
+        self.id = bot_id
+        self.bot_id = bot_id
+        self.title = "Test Bot"
+        self.username = "test_bot"
+        self.token = "TEST_TOKEN"
 
 
 @pytest.mark.covers("B1.2")
 def test_status_for_unknown_user_shows_no_subscription_message():
     """B1.2: Нажатие «Моя подписка» должно сообщать об отсутствии подписки и показать меню."""
     cb = FakeCallbackQuery(user_id=123456, data="sub:status")
-    pool = FakePool(blocked=False, row=None)  # не заблокирован, подписки нет
+    pool = FakePool(blocked=False, row=None)
+    bot_model = FakeBotModel(bot_id=1)  # ✅ ДОБАВЛЕНО
 
-    asyncio.run(on_status(cb, pool))
+    asyncio.run(on_status(cb, pool, bot_model))  # ✅ ИЗМЕНЕНО
 
     # Текст с сообщением об отсутствии подписки
     assert cb.message.last_text is not None

@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-from bot.main import on_status  # noqa: E402
+from bot.subscriptions import on_status # noqa: E402
 
 
 class FakeFromUser:
@@ -86,8 +86,8 @@ def test_status_active_subscription_card():
 
     cb = FakeCallbackQuery(user_id=123456)
     pool = FakePool(row=row)
-
-    asyncio.run(on_status(cb, pool))
+    bot_model = FakeBotModel(bot_id=1)
+    asyncio.run(on_status(cb, pool,bot_model))
 
     # Текст присутствует и содержит ключевые поля
     txt = cb.message.last_text or ""
@@ -103,3 +103,8 @@ def test_status_active_subscription_card():
 
     # Колбэк подтверждён
     assert cb.answered is True
+
+class FakeBotModel:
+    def __init__(self, bot_id: int):
+        self.id = bot_id
+        self.bot_id = bot_id

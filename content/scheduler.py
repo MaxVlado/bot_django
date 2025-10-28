@@ -45,7 +45,7 @@ def send_scheduled_content(
     
     # Находим все активные прогрессы для данного бота
     progress_list = UserContentProgress.objects.filter(
-        topic__bot_id=bot_id,
+        topic__bot__bot_id=bot_id,
         completed=False
     ).select_related(
         'user', 'topic', 'subscription', 'last_post_sent'

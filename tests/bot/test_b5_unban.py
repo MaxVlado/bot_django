@@ -10,7 +10,7 @@ import asyncio
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-from bot.main import cmd_start  # noqa: E402
+from bot.subscriptions import cmd_start  # noqa: E402
 
 
 class FakeFromUser:

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-from bot.main import on_status  # noqa: E402
+from bot.subscriptions import on_status  # noqa: E402
 
 
 class FakeFromUser:
@@ -80,8 +80,9 @@ def test_status_expired_subscription_shows_renew_hint():
 
     cb = FakeCallbackQuery(user_id=123456)
     pool = FakePool(row=row)
+    bot_model = FakeBotModel(bot_id=1)
 
-    asyncio.run(on_status(cb, pool))
+    asyncio.run(on_status(cb, pool,bot_model))
 
     txt = cb.message.last_text or ""
     # Карточка и статус
@@ -99,3 +100,9 @@ def test_status_expired_subscription_shows_renew_hint():
 
     # Колбэк подтверждён
     assert cb.answered is True
+
+
+class FakeBotModel:
+    def __init__(self, bot_id: int):
+        self.id = bot_id
+        self.bot_id = bot_id
