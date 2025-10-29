@@ -11,8 +11,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-import bot.main as botmod  # noqa: E402
-from bot.main import notify_payment_success  # noqa: E402
+from bot.notifications import notify_payment_success 
 
 
 class FakeBotAPI:

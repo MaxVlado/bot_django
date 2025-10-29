@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-from bot.main import notify_payment_success, notify_payment_non_success  # noqa: E402
+from bot.notifications import notify_payment_success, notify_payment_non_success  # noqa: E402  # noqa: E402
 
 
 class FakeBotAPI:

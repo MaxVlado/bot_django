@@ -10,8 +10,7 @@ import asyncio
 import pytest
 
 aiogram = pytest.importorskip("aiogram")  # noqa: F401
-import bot.main as botmod  # noqa: E402
-from bot.main import on_status, on_renew  # noqa: E402
+from bot.subscriptions import on_status, on_renew  # ✅ ИСПРАВЛЕНО
 
 
 # ----- Фейки -----
@@ -73,9 +72,19 @@ class FakePoolPlansByBot:
         return [p for p in self.plans if p.get("bot_id") == bot_id and p.get("enabled", True)]
 
 
+class FakeBotModel:
+    """Фейковая модель бота для тестов"""
+    def __init__(self, bot_id: int):
+        self.id = bot_id
+        self.bot_id = bot_id
+        self.title = f"Test Bot {bot_id}"
+        self.username = f"test_bot_{bot_id}"
+        self.token = f"TEST_TOKEN_{bot_id}"
+
+
 # ----- Тесты -----
 @pytest.mark.covers("B7.2")
-def test_status_independent_per_bot(monkeypatch):
+def test_status_independent_per_bot():
     """B7.2: Статус подписки один и тот же user_id видит разный для разных BOT_ID."""
     from datetime import datetime, timedelta, timezone
     now = datetime.now(timezone.utc)
@@ -89,17 +98,17 @@ def test_status_independent_per_bot(monkeypatch):
     user_id = 100500
 
     # BOT_ID = 1
-    monkeypatch.setattr(botmod, "BOT_ID", 1)
+    bot_model_1 = FakeBotModel(bot_id=1)
     cb1 = FakeCallbackQuery(user_id, "sub:status")
-    asyncio.run(on_status(cb1, pool))
+    asyncio.run(on_status(cb1, pool, bot_model_1))
     txt1 = cb1.message.last_text or ""
     assert "PLAN-ONE" in txt1 and "4 UAH" in txt1
     assert cb1.answered is True
 
     # BOT_ID = 2
-    monkeypatch.setattr(botmod, "BOT_ID", 2)
+    bot_model_2 = FakeBotModel(bot_id=2)
     cb2 = FakeCallbackQuery(user_id, "sub:status")
-    asyncio.run(on_status(cb2, pool))
+    asyncio.run(on_status(cb2, pool, bot_model_2))
     txt2 = cb2.message.last_text or ""
     assert "PLAN-TWO" in txt2 and "8 UAH" in txt2
     assert "PLAN-ONE" not in txt2, "Данные другого бота не должны утекать"
@@ -107,7 +116,7 @@ def test_status_independent_per_bot(monkeypatch):
 
 
 @pytest.mark.covers("B7.2")
-def test_plans_list_independent_per_bot(monkeypatch):
+def test_plans_list_independent_per_bot():
     """B7.2: «Продлить подписку» показывает разные планы для разных BOT_ID."""
     plans = [
         {"id": 10, "bot_id": 1, "name": "B1-4", "price": 4, "currency": "UAH", "duration_days": 7, "enabled": True},
@@ -118,9 +127,9 @@ def test_plans_list_independent_per_bot(monkeypatch):
     user_id = 100500
 
     # BOT_ID = 1
-    monkeypatch.setattr(botmod, "BOT_ID", 1)
+    bot_model_1 = FakeBotModel(bot_id=1)
     cb1 = FakeCallbackQuery(user_id, "sub:renew")
-    asyncio.run(on_renew(cb1, pool))
+    asyncio.run(on_renew(cb1, pool, bot_model_1))
     kb1 = cb1.message.last_markup
     btns1 = [b for row in kb1.inline_keyboard for b in row]
     calls1 = [getattr(b, "callback_data", "") for b in btns1]
@@ -129,9 +138,9 @@ def test_plans_list_independent_per_bot(monkeypatch):
     assert cb1.answered is True
 
     # BOT_ID = 2
-    monkeypatch.setattr(botmod, "BOT_ID", 2)
+    bot_model_2 = FakeBotModel(bot_id=2)
     cb2 = FakeCallbackQuery(user_id, "sub:renew")
-    asyncio.run(on_renew(cb2, pool))
+    asyncio.run(on_renew(cb2, pool, bot_model_2))
     kb2 = cb2.message.last_markup
     btns2 = [b for row in kb2.inline_keyboard for b in row]
     calls2 = [getattr(b, "callback_data", "") for b in btns2]
