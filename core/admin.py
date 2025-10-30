@@ -8,12 +8,33 @@ from django.shortcuts import get_object_or_404
 from django.utils.html import format_html
 from django.conf import settings
 from django.db import models
+from django import forms
 
 
-
+class MerchantConfigForm(forms.ModelForm):
+    """Кастомная форма для MerchantConfig с поддержкой assume_scheme"""
+    
+    pay_url = forms.URLField(
+        initial="https://secure.wayforpay.com/pay",
+        assume_scheme='https'
+    )
+    api_url = forms.URLField(
+        initial="https://api.wayforpay.com/api",
+        assume_scheme='https'
+    )
+    django_api_base = forms.URLField(
+        initial="https://dev.profilinggroup.com/api/payments/wayforpay",
+        help_text="URL Django API для создания инвойсов (НЕ WayForPay API!)",
+        assume_scheme='https'
+    )
+    
+    class Meta:
+        model = MerchantConfig
+        fields = '__all__'
 
 class MerchantConfigInline(admin.StackedInline):
     model = MerchantConfig
+    form = MerchantConfigForm  # <- ДОБАВЬ ЭТУ СТРОКУ
     can_delete = False
     extra = 0
 
