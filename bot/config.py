@@ -1,5 +1,6 @@
 # bot/config.py
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
@@ -37,9 +38,10 @@ class Settings(BaseSettings):
     wayforpay_currency: str
     wayforpay_order_prefix: str
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
 
 
 settings = Settings()
