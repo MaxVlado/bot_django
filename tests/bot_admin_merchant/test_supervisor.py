@@ -18,7 +18,7 @@ def test_generate_and_write_supervisor_config(tmp_path):
 
     # Проверка генерации
     config_text = supervisor.generate_config(bot)
-    assert f"[program:bot-{bot.bot_id}]" in config_text
+    assert f"[program:bot_{bot.bot_id}]" in config_text
     assert f"--bot-id {bot.bot_id}" in config_text
     assert bot.log_path in config_text
 
@@ -27,7 +27,7 @@ def test_generate_and_write_supervisor_config(tmp_path):
     path = supervisor.write_config(bot)
     assert path.exists()
     content = path.read_text()
-    assert f"bot-{bot.bot_id}" in content
+    assert f"bot_{bot.bot_id}" in content
     assert bot.log_path in content
 
 
@@ -43,7 +43,7 @@ def test_get_status_updates_bot_status(monkeypatch):
     )
 
     class FakeCompleted:
-        def __init__(self, stdout="bot-501    RUNNING   pid 1234, uptime 0:01:23"):
+        def __init__(self, stdout="bot_501    RUNNING   pid 1234, uptime 0:01:23"):
             self.stdout = stdout
             self.stderr = ""
 
